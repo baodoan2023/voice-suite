@@ -52,7 +52,7 @@ def discover_impls(impls_dir: Path) -> dict[str, VoiceImpl]:
             continue
         try:
             module = _load_package_init(f"_impl_{child.name}", init_path)
-        except ImportError as exc:
+        except Exception as exc:
             print(f"discover_impls: skipping impl {child.name!r} "
                   f"(import failed: {exc})", file=sys.stderr)
             continue

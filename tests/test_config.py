@@ -37,3 +37,15 @@ def test_skips_broken_import_and_missing_IMPL(tmp_path, capsys):
 
 def test_missing_impls_dir_returns_empty(tmp_path):
     assert discover_impls(tmp_path / "absent") == {}
+
+
+def test_skips_non_import_error_exceptions(tmp_path, capsys):
+    base = tmp_path / "impls"
+    (base / "runtime_error").mkdir(parents=True)
+    (base / "runtime_error" / "__init__.py").write_text(
+        "raise RuntimeError('boom')", encoding="utf-8")
+    (base / "good").mkdir()
+    (base / "good" / "__init__.py").write_text(GOOD_IMPL, encoding="utf-8")
+    found = discover_impls(base)
+    assert list(found) == ["dummy"]
+    assert "skipping impl 'runtime_error'" in capsys.readouterr().err
