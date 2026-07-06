@@ -3,7 +3,9 @@
 Date: 2026-07-06
 Status: DRAFT (pending user review)
 Origin: brainstormed from rag-suite (`C:\project\training_ai\rag-suite`), evaluating
-my-2nd-voice (`C:\project\training_ai\my-2nd-voice`).
+my-2nd-voice (`C:\project\training_ai\my-2nd-voice`), branch
+**`feat/run-on-windows`** (Windows build + WASAPI/APM/denoise/beam-search work
+already merged there; that branch is the base for all app-side changes).
 
 ---
 
@@ -32,9 +34,11 @@ plumbing (~350 lines) exists twice.
 
 ## Scope (v1)
 
-- Direction: **en → vi** only. vi → en is a config addition later (separate
-  Marian model, second dataset slice); the schema supports it from day one
-  (`src_lang`/`dst_lang` per utterance).
+- Direction: **vi → en** only — matching how the branch is actually used and
+  tuned (PhoWhisper Vietnamese ASR, `models/mt/vi-en` Marian, Vietnamese
+  whisper prompt, beam search for tonal languages). en → vi is a config
+  addition later; the schema supports it from day one (`src_lang`/`dst_lang`
+  per utterance).
 - Full pipeline audio→audio, offline/batch. Live-mic latency is out of scope
   (covered by the app's own planned latency CI).
 - Runs on **Windows** (this machine). The app's eval binary must build here.
@@ -65,13 +69,21 @@ voice-suite (Python, this repo)                my-2nd-voice (Rust)
 └──────────────────────────────┘
 ```
 
-### Side 1 — app-side changes (my-2nd-voice repo)
+### Side 1 — app-side changes (my-2nd-voice repo, branch `feat/run-on-windows`)
+
+Windows build gating **already exists** on this branch: `screencapturekit` and
+Metal whisper are macOS-gated, non-macOS gets CPU whisper-rs with an optional
+**`cuda` feature** (`whisper-rs/cuda` + `ort/cuda`); `hound` is already a
+dependency. The only app-side work is the new binary:
 
 1. **`src/bin/eval_batch.rs`** (new, ~200 lines). Args: `--manifest <jsonl>`,
    `--out-dir <dir>`, `--whisper-model`, `--mt-dir`, `--tts-onnx-dir`,
-   `--tts-voice`, `--src en`, `--dst vi`. Behavior:
+   `--tts-voice-style`, `--src vi`, `--dst en`, plus quality knobs matching
+   the live pipeline: `--beam-size` (default 5) and `--whisper-prompt`
+   (default = the branch's Vietnamese anchor prompt). Behavior:
    - Load Whisper + Marian + Supertonic once (reuses existing
-     `WhisperAsr`/`MarianMt`/`Supertonic` and the stage traits).
+     `WhisperAsr`/`MarianMt`/`Supertonic`, the stage traits, and the branch's
+     ASR episode normalization).
    - Per manifest row: read WAV (`hound`), resample to 16 kHz mono if needed
      (existing `SincResampler`), ASR → MT → TTS, write
      `<out-dir>/<id>.wav` + append JSONL line:
@@ -81,20 +93,21 @@ voice-suite (Python, this repo)                my-2nd-voice (Rust)
    - Marian is single-pair, so a batch is direction-homogeneous: eval_batch
      rejects manifest rows whose langs don't match `--src`/`--dst` (that row
      gets `error`, not silent mistranslation).
-   - **No VAD/merge**: FLEURS clips are clean single utterances; skipping VAD
-     keeps runs deterministic and measures AI quality, not chunking. It also
-     removes the silero model from Windows prerequisites. (VAD-on could be a
-     later flag/impl-config.)
-2. **Windows build gating** (`Cargo.toml` + cfg attributes; macOS unchanged):
-   - `screencapturekit` → `[target.'cfg(target_os = "macos")'.dependencies]`;
-     `#[cfg(target_os = "macos")]` on the `audio::screen_capture` module.
-   - `whisper-rs`: `metal` feature only under the macOS target table; plain
-     CPU features elsewhere.
-   - macOS-only bins (`incoming_spike`, `bidirectional`, anything touching
-     screen capture) get a cfg-gated `main` stub on non-macOS so
-     `cargo build`/`cargo test` still pass on Windows.
-   - New dep: `hound` (WAV read/write, pure Rust, small).
-   - Aligns with the app's own TODOS.md "Windows / Linux ports (v2)" item.
+   - **No VAD/merge/denoise/APM**: FLEURS clips are clean single utterances;
+     skipping the live-audio front-end keeps runs deterministic and measures
+     AI quality (ASR/MT/TTS), not chunking or noise handling. It also removes
+     the silero model from eval prerequisites. (VAD-on could be a later
+     flag/impl-config.)
+   - Builds with or without `--features cuda`; the impl config points at
+     whichever exe was built (cuDNN DLL placement is handled by the app's
+     existing run scripts / documented setup).
+
+Note: this branch's run-demo scripts reference an F5-TTS voice-clone stack
+(`--tts-voice`, `--tts-ref-text`) that `translate.rs` here does not compile —
+they belong to sibling branches (`feat/integrate-sherpa-styletts2`,
+`develop-sherpa-vi-asr`). v1 evaluates what **this branch builds**: Supertonic
+TTS. When F5/sherpa merges, it becomes a second impl config on the leaderboard
+— exactly the comparison this harness exists for.
 
 ### Side 2 — harness repo layout (this repo)
 
@@ -143,10 +156,10 @@ class StageTimings(BaseModel):           # frozen
 class Utterance(BaseModel):              # frozen — one ground-truth row
     id: str
     audio_path: str                      # input WAV (16 kHz mono, src speech)
-    src_lang: str                        # "en"
-    dst_lang: str                        # "vi"
-    ref_transcript: str                  # what was said (src lang)
-    ref_translation: str                 # reference translation (dst lang)
+    src_lang: str                        # "vi"
+    dst_lang: str                        # "en"
+    ref_transcript: str                  # what was said (Vietnamese)
+    ref_translation: str                 # reference translation (English)
 
 class VoiceResult(BaseModel):            # frozen — one utterance's output
     asr_text: str
@@ -183,20 +196,20 @@ import errors.
 
 ## Dataset & ingest
 
-Source: **FLEURS** (HuggingFace `google/fleurs`), configs `en_us` and `vi_vn`,
+Source: **FLEURS** (HuggingFace `google/fleurs`), configs `vi_vn` and `en_us`,
 `test` split. FLEURS sentences are n-way parallel (FLoRes heritage): joining
-`en_us` and `vi_vn` rows on the FLEURS `id` field yields
-(en audio, en transcript, vi text) triplets — exactly the needed ground truth.
+`vi_vn` and `en_us` rows on the FLEURS `id` field yields
+(vi audio, vi transcript, en text) triplets — exactly the needed ground truth.
 
 `voice-suite ingest --n 200 --seed 0`:
 1. Download both configs via `huggingface_hub`/`datasets` (cached by HF).
 2. Join on `id`; drop ids missing on either side.
 3. Deterministic sample of N (default 200) with seed.
-4. Write `data/utterances/<id>.wav` (16 kHz mono — FLEURS native rate) and
-   `data/manifest.jsonl` rows:
-   `{"id", "audio_path", "src_lang": "en", "dst_lang": "vi", "ref_transcript", "ref_translation"}`.
-   For FLEURS, `ref_transcript` = en `transcription` (raw casing),
-   `ref_translation` = vi `transcription` of the same id.
+4. Write `data/utterances/<id>.wav` (16 kHz mono — FLEURS native rate,
+   Vietnamese speech) and `data/manifest.jsonl` rows:
+   `{"id", "audio_path", "src_lang": "vi", "dst_lang": "en", "ref_transcript", "ref_translation"}`.
+   For FLEURS, `ref_transcript` = vi `transcription` (raw casing),
+   `ref_translation` = en `transcription` of the same id.
 
 `run`/`score` accept `--limit N --seed S` (sampling the manifest) exactly like
 rag-suite — use matching values on both.
@@ -224,19 +237,20 @@ Per (impl, utterance), four signals:
 
 | Signal | How | Cost |
 |---|---|---|
-| ASR quality | `wer(norm(asr_text), norm(ref_transcript))` via `jiwer`; norm = lowercase, strip punctuation, collapse whitespace | free |
-| MT quality | LLM judge (below): `mt_adequacy`, `mt_fluency` ∈ [0,1] | 1 judge call |
-| E2E intelligibility | back-transcribe output WAV with `faster-whisper large-v3` (CPU, local); judge scores `e2e_adequacy` from the back-transcript | slow-local + same judge call |
+| ASR quality | `wer(norm(asr_text), norm(ref_transcript))` via `jiwer` on the Vietnamese text; norm = lowercase, strip punctuation, collapse whitespace (unicode-safe — Vietnamese diacritics preserved, casing/punct folded) | free |
+| MT quality | LLM judge (below): `mt_adequacy`, `mt_fluency` ∈ [0,1] on the English translation | 1 judge call |
+| E2E intelligibility | back-transcribe output WAV with `faster-whisper large-v3` (CPU, local, language forced to `en`); judge scores `e2e_adequacy` from the back-transcript | slow-local + same judge call |
 | Latency | pass through `asr_ms/mt_ms/tts_ms` | free |
 
 ### Judge (one call per utterance, three scores)
 
 Plumbing copied from rag-suite (`_cli_judge`, `_anthropic_judge`,
 `_loads_lenient`, injectable `JudgeFn`, worker pool). New rubric — English
-prompt, bias-blind (no impl identity), judging Vietnamese output:
+prompt, bias-blind (no impl identity), judging the English translation of a
+Vietnamese source:
 
-- Inputs: `ref_transcript` (en), `ref_translation` (vi), `asr_text`,
-  `mt_text`, `back_transcript` (vi, from output audio).
+- Inputs: `ref_transcript` (vi), `ref_translation` (en), `asr_text`,
+  `mt_text`, `back_transcript` (en, from output audio).
 - Output JSON: `{"mt_adequacy": f, "mt_fluency": f, "e2e_adequacy": f,
   "verdict": str, "rationale": str}`.
 - `mt_*` judge `mt_text` against `ref_translation` (given the source);
@@ -245,8 +259,9 @@ prompt, bias-blind (no impl identity), judging Vietnamese output:
 
 ### Back-transcription scorer
 
-`faster-whisper large-v3` — deliberately a larger model than the small Whisper
-under test, so the scorer out-hears the system. Language forced to `vi`.
+`faster-whisper large-v3` — deliberately a larger model than the
+PhoWhisper-small under test, so the scorer out-hears the system. Language
+forced to `en` (the TTS output language).
 Results cached by output-audio content hash (it is the slowest scorer).
 If the output WAV is missing/unreadable → `e2e` scored 0 with error recorded;
 MT scores still computed.
@@ -286,8 +301,8 @@ eyeballing failure modes.
 
 - **Fake eval_batch**: a Python fixture script echoing canned JSONL — exercises
   the impl wrapper, runner, caching, and order-restoration end to end.
-- WER unit tests with known pairs (v1 scores English ASR text; the normalizer
-  is still unicode-safe so future vi→en reuses it unchanged).
+- WER unit tests with known pairs — v1 scores Vietnamese ASR text, so cases
+  cover diacritics preservation and punctuation/case folding.
 - Ingest tests against fake FLEURS rows (join, drop-missing, deterministic sample).
 - Judge tests via injectable `JudgeFn` mock (rag-suite trick), incl. lenient
   JSON parsing cases.
@@ -298,14 +313,20 @@ eyeballing failure modes.
 
 ## Prerequisites (documented in README at implementation)
 
-- Rust toolchain (app builds on Windows after gating changes).
-- Models on disk (one-time, ~1.5–2 GB):
-  - Whisper ggml (e.g. `ggml-small.bin`, ggerganov/whisper.cpp HF repo)
-  - Marian en→vi ONNX dir: `tokenizer.json`, `generation_config.json`,
-    `encoder_model_quantized.onnx`, `decoder_model_quantized.onnx`
-    (optimum/transformers.js layout, e.g. Xenova/opus-mt-en-vi)
+- Rust toolchain + Windows build deps per the app README (VS Build Tools,
+  LLVM, CMake); the branch already builds on Windows. Optional `--features
+  cuda` build (cuDNN DLLs next to the exe, per the app's run scripts).
+- Models on disk (one-time; `download_models.sh` is referenced by the app's
+  scripts but absent on this branch — the implementation plan includes
+  reconstructing the download steps and pinning exact sources):
+  - PhoWhisper ggml (branch scripts use
+    `models/whisper/ggml-phowhisper-small-tsa.bin`)
+  - Marian vi→en ONNX dir (`models/mt/vi-en`): `tokenizer.json`,
+    `generation_config.json`, `encoder_model_quantized.onnx`,
+    `decoder_model_quantized.onnx` (optimum/transformers.js layout)
   - Supertonic ONNX dir (`tts.json`, 4 `.onnx`, `unicode_indexer.json`) +
-    voice style JSON
+    an English voice style JSON
+  - No silero VAD model needed (eval mode skips VAD)
 - Python ≥3.12, `pip install -e ".[dev]"`; extras: `jiwer`, `faster-whisper`,
   `huggingface_hub`/`datasets`, `soundfile`.
 - Judge: Claude Code CLI login (default) or `ANTHROPIC_API_KEY`.
@@ -314,8 +335,10 @@ eyeballing failure modes.
 
 - No VAD in eval mode — deterministic, measures AI quality; VAD chunking is a
   live-pipeline concern. Revisit as an impl config if chunking quality matters.
-- en→vi only — schema is direction-agnostic; vi→en = second Marian model +
+- vi→en only — schema is direction-agnostic; en→vi = second Marian model +
   second manifest slice + one impl config.
+- v1 evaluates this branch's TTS (Supertonic). The F5/sherpa voice-clone stack
+  from sibling branches becomes a second impl config when it merges.
 - TTS scored only via intelligibility (back-transcription), not naturalness.
 - Latency numbers from eval_batch are *stage compute times* on this machine,
   not the app's live end-to-end latency budget (VAD/jitter/devices excluded).
