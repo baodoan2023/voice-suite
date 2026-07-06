@@ -1,6 +1,8 @@
 """WER normalization and scoring: diacritics, folding, edge cases."""
 from __future__ import annotations
 
+import unicodedata
+
 import pytest
 
 from voice_suite.scoring.wer import norm_text, score_wer
@@ -34,3 +36,21 @@ def test_empty_reference():
 
 def test_wer_capped_at_one():
     assert score_wer("một", "a b c d e f") == 1.0
+
+
+def test_norm_text_nfc_nfd_invariant():
+    # Verify that norm_text produces identical output regardless of
+    # whether input is in NFC (precomposed) or NFD (decomposed) form.
+    # This is critical for Vietnamese text with diacritics.
+    original = "tiếng Việt"
+    nfc_form = unicodedata.normalize("NFC", original)
+    nfd_form = unicodedata.normalize("NFD", original)
+
+    # Both forms should normalize to the same result
+    assert norm_text(nfc_form) == norm_text(nfd_form)
+
+    # Expected normalized result: lowercase, no diacritics preserved
+    # (diacritics should be preserved as-is, just lowercased)
+    expected = "tiếng việt"
+    assert norm_text(nfc_form) == expected
+    assert norm_text(nfd_form) == expected

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 import jiwer
 
@@ -13,6 +14,7 @@ _PUNCT_RE = re.compile(r"[^\w\s]")
 
 def norm_text(s: str) -> str:
     """Lowercase, punctuation → space, collapse whitespace."""
+    s = unicodedata.normalize("NFC", s)
     s = _PUNCT_RE.sub(" ", s.lower())
     return " ".join(s.split())
 
