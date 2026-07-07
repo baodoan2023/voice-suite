@@ -71,3 +71,33 @@ def test_run_unknown_impl_fails(tmp_path, monkeypatch, make_utt):
     monkeypatch.chdir(tmp_path)
     r = runner.invoke(app, ["run", "--impl", "nope"])
     assert r.exit_code != 0
+
+
+BROKEN_IMPL = '''
+from pathlib import Path
+
+class _Impl:
+    name = "broken"
+    def setup(self):
+        raise RuntimeError("boom")
+    def translate_batch(self, utts, out_dir: Path):
+        return []
+IMPL = _Impl()
+'''
+
+
+def _write_broken_impl(root: Path):
+    (root / "impls" / "broken").mkdir(parents=True)
+    (root / "impls" / "broken" / "__init__.py").write_text(BROKEN_IMPL,
+                                                           encoding="utf-8")
+
+
+def test_run_all_isolates_one_impl_failure(tmp_path, monkeypatch, make_utt):
+    _write_world(tmp_path, make_utt)
+    _write_broken_impl(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    r = runner.invoke(app, ["run", "--impl", "all"])
+    assert r.exit_code == 1
+    assert "FAILED: broken" in r.output
+    assert "ran: fake (3 new)" in r.output
