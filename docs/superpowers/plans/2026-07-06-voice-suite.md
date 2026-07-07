@@ -1974,7 +1974,7 @@ git commit -m "feat: score orchestration with content-keyed cache"
   - `aggregate(records: list[ScoredRecord]) -> list[dict]` — one row per impl with keys `impl, scored, errors, judge_errors, mean_wer, mt_adequacy, mt_fluency, e2e_adequacy, asr_ms_p50, asr_ms_p95, mt_ms_p50, mt_ms_p95, tts_ms_p50, tts_ms_p95`; sorted best-first by `e2e_adequacy` desc then `mean_wer` asc (the tiebreak also ranks `--no-judge` runs, where every e2e is 0).
   - `worst_utterances(records, utts_by_id: dict[str, Utterance], k: int = 10) -> list[dict]` — lowest e2e (then highest WER) with all texts for failure eyeballing.
   - `render_report(rows: list[dict], worst: list[dict]) -> str` — markdown per the spec's table:
-    `| impl | n | WER↓ | mt_adequacy↑ | mt_fluency↑ | e2e_adequacy↑ | asr_ms P50/P95 | mt_ms P50/P95 | tts_ms P50/P95 | errors |`
+    `| Rank | Impl | n | WER↓ | mt_adequacy↑ | mt_fluency↑ | e2e_adequacy↑ | asr_ms P50/P95 | mt_ms P50/P95 | tts_ms P50/P95 | errors |`
 - Semantics: judge means average records with `judge.error is None` (pipeline-error zeros INCLUDED — crashing configs rank worse); `errors` counts `run_error`; latency percentiles cover records that actually ran (`run_error is None`), nearest-rank method matching the app's `pct()`.
 
 - [ ] **Step 1: Write the failing test**

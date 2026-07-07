@@ -79,3 +79,25 @@ def test_render_report_contains_table_and_appendix(make_utt):
 
 def test_render_report_empty_is_valid():
     assert "voice-suite Leaderboard" in render_report([], [])
+
+
+def test_render_report_judge_errors_advisory():
+    recs = [_rec(i=1, judge_error="api down"), _rec(i=2)]
+    rows = aggregate(recs)
+    text = render_report(rows, [])
+    assert "judge call(s) failed and are excluded from judge means" in text
+
+
+def test_render_report_shows_utterance_error(make_utt):
+    recs = [_rec(i=1, run_error="asr crashed")]
+    utts = {"u001": make_utt(1)}
+    rows = aggregate(recs)
+    worst = worst_utterances(recs, utts)
+    text = render_report(rows, worst)
+    assert "- error: asr crashed" in text
+
+
+def test_worst_utterances_manifest_row_missing():
+    recs = [_rec(i=1)]
+    worst = worst_utterances(recs, {})
+    assert worst[0]["ref_transcript"] == "(manifest row missing)"
