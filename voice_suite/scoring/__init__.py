@@ -145,7 +145,10 @@ def score_all(
         if utt is None:
             continue  # record for an utterance outside this sample
         audio = rec.result.audio_path
-        sha = audio_sha256(Path(audio)) if audio and Path(audio).exists() else ""
+        try:
+            sha = audio_sha256(Path(audio)) if audio and Path(audio).exists() else ""
+        except OSError:
+            sha = ""
         key = score_key(rec.impl, rec.utt_id, rec.result, sha, judge_id)
         if key in done or key in pending:
             continue

@@ -138,3 +138,22 @@ def test_parallel_workers_write_all_records(tmp_path, make_utt, make_result):
     recs = load_scored_records(scored)
     assert len(recs) == 8
     assert {r.utt_id for r in recs} == {u.id for u in utts}
+
+
+def test_unreadable_audio_file_does_not_abort_batch(tmp_path, make_utt, make_result, monkeypatch):
+    import voice_suite.scoring as scoring_mod
+
+    wav = tmp_path / "out.wav"
+    wav.write_bytes(b"RIFF-fake-audio")
+    utt = make_utt(1)
+    raw = [RawRecord(impl="a", utt_id=utt.id,
+                     result=make_result(audio_path=str(wav)))]
+
+    def boom(path):
+        raise OSError("simulated unreadable file")
+
+    monkeypatch.setattr(scoring_mod, "audio_sha256", boom)
+    score_all(raw, [utt], tmp_path / "s.jsonl", call_judge=_judge_ok, judge_id="t:m")
+    recs = load_scored_records(tmp_path / "s.jsonl")
+    assert len(recs) == 1
+    assert recs[0].back_transcript == ""
