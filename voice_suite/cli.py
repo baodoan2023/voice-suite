@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from enum import Enum
 from typing import Optional
 
@@ -14,6 +15,11 @@ from voice_suite.runner import load_raw_records, run_impl
 from voice_suite.sampling import sample_items
 from voice_suite.scoring import load_scored_records, score_all
 from voice_suite.scoring import judge as judge_mod
+
+# Reconfigure stdout/stderr to UTF-8 for Windows console compatibility
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 app = typer.Typer(help="Speech-translation eval harness for my-2nd-voice.")
 
