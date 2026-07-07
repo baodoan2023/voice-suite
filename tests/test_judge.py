@@ -1,10 +1,13 @@
 """Judge plumbing: prompt content, score mapping, lenient JSON, backends."""
 from __future__ import annotations
 
+import types
+
 import pytest
 
 from voice_suite.scoring.judge import (
-    _loads_lenient, build_judge_prompt, get_judge, score_utterance,
+    _anthropic_judge, _loads_lenient, build_judge_prompt, get_judge,
+    score_utterance,
 )
 
 GOOD = {"mt_adequacy": 0.9, "mt_fluency": 0.8, "e2e_adequacy": 0.7,
@@ -75,3 +78,35 @@ def test_cli_judge_missing_binary_raises(monkeypatch):
     monkeypatch.setattr(judge_mod.shutil, "which", lambda _: None)
     with pytest.raises(RuntimeError, match="claude CLI not found"):
         judge_mod._cli_judge("prompt")
+
+
+def test_anthropic_judge_parses_fenced_reply_and_reuses_client(monkeypatch):
+    import anthropic
+
+    from voice_suite.scoring import judge as judge_mod
+    monkeypatch.setattr(judge_mod, "_anthropic_client", None)
+
+    fenced_reply = (
+        "Sure, here are the scores:\n```json\n"
+        '{"mt_adequacy": 0.9, "mt_fluency": 0.8, "e2e_adequacy": 0.7, '
+        '"verdict": "good", "rationale": "close match"}\n```'
+    )
+    constructions = []
+
+    class FakeAnthropic:
+        def __init__(self):
+            constructions.append(self)
+            self.messages = self
+
+        def create(self, **kwargs):
+            block = types.SimpleNamespace(type="text", text=fenced_reply)
+            return types.SimpleNamespace(content=[block])
+
+    monkeypatch.setattr(anthropic, "Anthropic", FakeAnthropic)
+
+    first = judge_mod._anthropic_judge("prompt one")
+    second = judge_mod._anthropic_judge("prompt two")
+
+    assert first == GOOD
+    assert second == GOOD
+    assert len(constructions) == 1

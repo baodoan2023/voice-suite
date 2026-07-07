@@ -47,17 +47,26 @@ def build_judge_prompt(utt: Utterance, result: VoiceResult,
     )
 
 
+_anthropic_client: "anthropic.Anthropic | None" = None
+
+
+def _get_anthropic_client() -> "anthropic.Anthropic":
+    global _anthropic_client
+    if _anthropic_client is None:
+        import anthropic
+        _anthropic_client = anthropic.Anthropic()
+    return _anthropic_client
+
+
 def _anthropic_judge(prompt: str, model: str = DEFAULT_JUDGE_MODEL) -> dict:
     """Call the Anthropic API and return parsed JSON sub-scores."""
-    import anthropic
-
-    client = anthropic.Anthropic()
+    client = _get_anthropic_client()
     msg = client.messages.create(
         model=model, max_tokens=1024, temperature=0,
         messages=[{"role": "user", "content": prompt}],
     )
     text = next((b.text for b in msg.content if getattr(b, "type", None) == "text"), "")
-    return json.loads(text)
+    return _loads_lenient(text)
 
 
 _DECODER = json.JSONDecoder()
