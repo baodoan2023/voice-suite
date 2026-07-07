@@ -81,7 +81,8 @@ class M2vBatchImpl:
         # No timeout: a 200-utterance CPU batch legitimately runs for a while.
         proc = subprocess.run(
             [*self._cmd, "--manifest", str(manifest), "--out-dir", str(out_dir)],
-            capture_output=True, text=True)
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace")
         if proc.returncode != 0:
             raise RuntimeError(
                 f"eval_batch exited {proc.returncode}:\n{proc.stderr.strip()}")
@@ -97,9 +98,9 @@ class M2vBatchImpl:
                     asr_text=row.get("asr_text", ""),
                     mt_text=row.get("mt_text", ""),
                     audio_path=row.get("audio_out"),
-                    timings=StageTimings(asr_ms=row.get("asr_ms", 0),
-                                         mt_ms=row.get("mt_ms", 0),
-                                         tts_ms=row.get("tts_ms", 0)),
+                    timings=StageTimings(asr_ms=int(round(row.get("asr_ms", 0))),
+                                         mt_ms=int(round(row.get("mt_ms", 0))),
+                                         tts_ms=int(round(row.get("tts_ms", 0)))),
                     error=row.get("error"),
                 )
         missing = VoiceResult(error="missing from eval_batch output")

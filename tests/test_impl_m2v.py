@@ -67,3 +67,46 @@ def test_setup_flags_missing_keys(tmp_path):
     impl = M2vBatchImpl(config_path=cfg)
     with pytest.raises(RuntimeError, match="missing keys"):
         impl.setup()
+
+
+def test_setup_builds_command_from_config(tmp_path):
+    # Create real files for config paths
+    exe = tmp_path / "eval_batch.exe"
+    whisper_model = tmp_path / "whisper_model.bin"
+    mt_dir = tmp_path / "mt_dir"
+    tts_onnx_dir = tmp_path / "tts_onnx_dir"
+    tts_voice_style = tmp_path / "tts_voice_style.json"
+
+    exe.touch()
+    whisper_model.touch()
+    mt_dir.mkdir()
+    tts_onnx_dir.mkdir()
+    tts_voice_style.touch()
+
+    # Write valid local.toml with all required keys and extra_args
+    cfg = tmp_path / "local.toml"
+    cfg.write_text(
+        f'exe = "{exe.as_posix()}"\n'
+        f'whisper_model = "{whisper_model.as_posix()}"\n'
+        f'mt_dir = "{mt_dir.as_posix()}"\n'
+        f'tts_onnx_dir = "{tts_onnx_dir.as_posix()}"\n'
+        f'tts_voice_style = "{tts_voice_style.as_posix()}"\n'
+        'extra_args = ["--beam-size", "5"]\n',
+        encoding="utf-8")
+
+    impl = M2vBatchImpl(config_path=cfg)
+    impl.setup()
+
+    # Verify command construction with correct order
+    # Paths in TOML use forward slashes (as_posix()), so expected_cmd uses them too
+    expected_cmd = [
+        exe.as_posix(),
+        "--whisper-model", whisper_model.as_posix(),
+        "--mt-dir", mt_dir.as_posix(),
+        "--tts-onnx-dir", tts_onnx_dir.as_posix(),
+        "--tts-voice-style", tts_voice_style.as_posix(),
+        "--src", "vi",
+        "--dst", "en",
+        "--beam-size", "5",
+    ]
+    assert impl._cmd == expected_cmd
