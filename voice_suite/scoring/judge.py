@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import threading
 from typing import Callable
 
 from voice_suite.protocol import JudgeScore, Utterance, VoiceResult
@@ -48,13 +49,16 @@ def build_judge_prompt(utt: Utterance, result: VoiceResult,
 
 
 _anthropic_client: "anthropic.Anthropic | None" = None
+_anthropic_client_lock = threading.Lock()
 
 
 def _get_anthropic_client() -> "anthropic.Anthropic":
     global _anthropic_client
     if _anthropic_client is None:
-        import anthropic
-        _anthropic_client = anthropic.Anthropic()
+        with _anthropic_client_lock:
+            if _anthropic_client is None:
+                import anthropic
+                _anthropic_client = anthropic.Anthropic()
     return _anthropic_client
 
 
