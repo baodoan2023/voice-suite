@@ -22,8 +22,8 @@ _TEMPLATE = """\
 exe = "C:/project/training_ai/my-2nd-voice/target/release/eval_batch.exe"
 whisper_model = "C:/project/training_ai/my-2nd-voice/models/whisper/ggml-phowhisper-small-tsa.bin"
 mt_dir = "C:/project/training_ai/my-2nd-voice/models/mt/vi-en"
-tts_onnx_dir = "C:/project/training_ai/my-2nd-voice/models/tts/supertonic/onnx"
-tts_voice_style = "C:/project/training_ai/my-2nd-voice/models/tts/supertonic/voice_styles/M1.json"
+tts_onnx_dir = "C:/project/training_ai/my-2nd-voice/models/tts/supertonic-3/onnx"
+tts_voice_style = "C:/project/training_ai/my-2nd-voice/models/tts/supertonic-3/voice_styles/M1.json"
 # extra_args = ["--beam-size", "5"]
 """
 
