@@ -4,5 +4,6 @@ __pycache__/
 .venv/
 venv/
 data/
-out/
+out/audio/
 impls/*/local.toml
+.coverage
