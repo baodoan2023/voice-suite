@@ -80,6 +80,30 @@ def test_cli_judge_missing_binary_raises(monkeypatch):
         judge_mod._cli_judge("prompt")
 
 
+def test_cli_judge_runs_subprocess_with_utf8_encoding(monkeypatch):
+    import json as json_mod
+
+    from voice_suite.scoring import judge as judge_mod
+    monkeypatch.setattr(judge_mod.shutil, "which", lambda _: "/usr/bin/claude")
+
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["args"] = args
+        captured.update(kwargs)
+        envelope = {"result": json_mod.dumps(GOOD)}
+        return types.SimpleNamespace(
+            returncode=0, stdout=json_mod.dumps(envelope), stderr="")
+
+    monkeypatch.setattr(judge_mod.subprocess, "run", fake_run)
+
+    result = judge_mod._cli_judge("nguồn tiếng việt ả")
+
+    assert result == GOOD
+    assert captured["encoding"] == "utf-8"
+    assert captured["errors"] == "replace"
+
+
 def test_anthropic_judge_parses_fenced_reply_and_reuses_client(monkeypatch):
     import anthropic
 

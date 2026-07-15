@@ -112,6 +112,7 @@ def _cli_judge(prompt: str, model: str = DEFAULT_JUDGE_MODEL,
     proc = subprocess.run(
         [exe, "-p", "--output-format", "json", "--model", model],
         input=prompt, capture_output=True, text=True, timeout=_CLI_TIMEOUT_S,
+        encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
         raise RuntimeError(
