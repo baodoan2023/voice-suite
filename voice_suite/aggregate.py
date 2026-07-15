@@ -78,6 +78,108 @@ def worst_utterances(records: list[ScoredRecord],
     return out
 
 
+def _metric_deltas(rows: list[dict]) -> list[str]:
+    """Per-quality-metric leader and gap across impls; omits ties."""
+    metrics = [
+        ("mean_wer", "WER", False),
+        ("mt_adequacy", "mt_adequacy", True),
+        ("mt_fluency", "mt_fluency", True),
+        ("e2e_adequacy", "e2e_adequacy", True),
+    ]
+    lines: list[str] = []
+    for key, label, higher_is_better in metrics:
+        pick = max if higher_is_better else min
+        antipick = min if higher_is_better else max
+        best = pick(rows, key=lambda r: r[key])
+        worst_row = antipick(rows, key=lambda r: r[key])
+        if best["impl"] == worst_row["impl"]:
+            continue
+        gap = abs(best[key] - worst_row[key])
+        lines.append(
+            f"- **{label}**: `{best['impl']}` leads at {best[key]:.3f} vs "
+            f"`{worst_row['impl']}` at {worst_row[key]:.3f} ({gap:.3f} gap)."
+        )
+    return lines
+
+
+def _latency_ratios(rows: list[dict]) -> list[str]:
+    """Fastest-vs-slowest ratio per pipeline stage; omits zero/tied stages."""
+    stages = [("asr_ms_p50", "asr_ms P50"), ("mt_ms_p50", "mt_ms P50"),
+              ("tts_ms_p50", "tts_ms P50")]
+    lines: list[str] = []
+    for key, label in stages:
+        fastest = min(rows, key=lambda r: r[key])
+        slowest = max(rows, key=lambda r: r[key])
+        if fastest["impl"] == slowest["impl"] or fastest[key] == 0:
+            continue
+        ratio = slowest[key] / fastest[key]
+        lines.append(
+            f"- **{label}**: `{fastest['impl']}` is {ratio:.1f}x faster than "
+            f"`{slowest['impl']}` ({fastest[key]} vs {slowest[key]} ms)."
+        )
+    return lines
+
+
+def _error_rates(rows: list[dict]) -> list[str]:
+    """Pipeline-error rate per impl."""
+    lines = []
+    for r in rows:
+        rate = r["errors"] / r["scored"] * 100
+        lines.append(f"- **errors**: `{r['impl']}`: {r['errors']}/{r['scored']} ({rate:.1f}%).")
+    return lines
+
+
+def _shared_worst_utterances(worst: list[dict]) -> list[str]:
+    """Utterance ids that landed in more than one impl's worst-k list."""
+    by_utt: dict[str, list[str]] = {}
+    for w in worst:
+        by_utt.setdefault(w["utt_id"], []).append(w["impl"])
+    shared = sorted(uid for uid, impls in by_utt.items() if len(impls) > 1)
+    if not shared:
+        return []
+    return [f"- **shared difficulty**: {len(shared)} utterance(s) challenged "
+            f"more than one impl (not impl-specific): {', '.join(shared)}."]
+
+
+def render_analysis(rows: list[dict], worst: list[dict]) -> list[str]:
+    """Mechanical cross-impl comparison, derived purely from already-computed
+    aggregate/worst data — no extra judging or LLM calls."""
+    if len(rows) < 2:
+        return []
+    body = (_metric_deltas(rows) + _latency_ratios(rows) +
+            _error_rates(rows) + _shared_worst_utterances(worst))
+    if not body:
+        return []
+    return ["## Analysis", ""] + body + [""]
+
+
+def render_metrics_glossary() -> list[str]:
+    """Static glossary of every leaderboard column. Full depth: docs/metrics.md."""
+    return [
+        "## Metric definitions", "",
+        "| Metric | Meaning | Direction |",
+        "|---|---|---|",
+        "| `WER` | ASR transcript vs. reference transcript word error rate "
+        "(capped at 1.0) | lower is better |",
+        "| `mt_adequacy` | Does the MT output preserve the reference "
+        "translation's meaning? (LLM judge) | higher is better |",
+        "| `mt_fluency` | Is the MT output natural, grammatical English? "
+        "(LLM judge) | higher is better |",
+        "| `e2e_adequacy` | Does the synthesized output audio (re-heard via "
+        "back-transcription) still convey the reference meaning? (LLM judge) "
+        "| higher is better |",
+        "| `asr_ms` / `mt_ms` / `tts_ms` | Per-utterance wall-clock time per "
+        "pipeline stage, P50/P95 across non-crashed runs | lower is faster |",
+        "| `errors` | Utterances where the impl itself crashed/failed to "
+        "produce output | lower is better |",
+        "",
+        "Pipeline-error and judge-error records count as `0.0` in the judge-"
+        "score means (crashing configs rank worse, not excluded). Full "
+        "depth: `docs/metrics.md`.",
+        "",
+    ]
+
+
 def render_report(rows: list[dict], worst: list[dict]) -> str:
     """Render the leaderboard + worst-utterances appendix as markdown."""
     lines = [
@@ -106,6 +208,8 @@ def render_report(rows: list[dict], worst: list[dict]) -> str:
                          f"failed and are excluded from judge means.")
     if rows:
         lines += ["", f"**Best implementation: `{rows[0]['impl']}`**"]
+    lines += ["", *render_metrics_glossary()]
+    lines += render_analysis(rows, worst)
     if worst:
         lines += ["", "## Worst utterances (lowest e2e_adequacy)", ""]
         for w in worst:

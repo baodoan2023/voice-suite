@@ -1,18 +1,29 @@
 """Leaderboard math: means, exclusions, percentiles, ranking, worst-k."""
 from __future__ import annotations
 
-from voice_suite.aggregate import _pct, aggregate, render_report, worst_utterances
+from voice_suite.aggregate import (
+    _error_rates,
+    _latency_ratios,
+    _metric_deltas,
+    _pct,
+    _shared_worst_utterances,
+    aggregate,
+    render_analysis,
+    render_metrics_glossary,
+    render_report,
+    worst_utterances,
+)
 from voice_suite.protocol import JudgeScore, ScoredRecord, StageTimings
 
 
 def _rec(impl="a", i=1, wer=0.2, e2e=0.8, judge_error=None, run_error=None,
-         asr_ms=100):
+         asr_ms=100, mt_ms=50, tts_ms=80):
     return ScoredRecord(
         impl=impl, utt_id=f"u{i:03d}", cache_key=f"k{impl}{i}", wer=wer,
         asr_text=f"asr {i}", mt_text=f"mt {i}", back_transcript=f"bt {i}",
         judge=JudgeScore(mt_adequacy=e2e, mt_fluency=e2e, e2e_adequacy=e2e,
                          verdict="v", rationale="r", error=judge_error),
-        timings=StageTimings(asr_ms=asr_ms, mt_ms=50, tts_ms=80),
+        timings=StageTimings(asr_ms=asr_ms, mt_ms=mt_ms, tts_ms=tts_ms),
         run_error=run_error,
     )
 
@@ -101,3 +112,82 @@ def test_worst_utterances_manifest_row_missing():
     recs = [_rec(i=1)]
     worst = worst_utterances(recs, {})
     assert worst[0]["ref_transcript"] == "(manifest row missing)"
+
+
+def test_render_report_includes_metric_glossary():
+    text = render_report([], [])
+    assert "## Metric definitions" in text
+    assert "WER" in text
+    assert "e2e_adequacy" in text
+
+
+def test_metric_deltas_reports_leader_and_gap():
+    recs = [_rec(impl="a", i=1, wer=0.1, e2e=0.9),
+            _rec(impl="b", i=1, wer=0.3, e2e=0.5)]
+    rows = aggregate(recs)
+    text = "\n".join(_metric_deltas(rows))
+    assert "`a` leads at 0.900 vs `b` at 0.500 (0.400 gap)" in text
+    assert "WER" in text
+
+
+def test_metric_deltas_omits_ties():
+    recs = [_rec(impl="a", i=1, wer=0.2, e2e=0.8),
+            _rec(impl="b", i=1, wer=0.2, e2e=0.8)]
+    rows = aggregate(recs)
+    assert _metric_deltas(rows) == []
+
+
+def test_latency_ratios_reports_fastest_vs_slowest():
+    recs = [_rec(impl="fast", i=1, asr_ms=100),
+            _rec(impl="slow", i=1, asr_ms=400)]
+    rows = aggregate(recs)
+    text = "\n".join(_latency_ratios(rows))
+    assert "`fast` is 4.0x faster than `slow` (100 vs 400 ms)" in text
+
+
+def test_latency_ratios_omits_ties():
+    recs = [_rec(impl="a", i=1, asr_ms=100),
+            _rec(impl="b", i=1, asr_ms=100)]
+    rows = aggregate(recs)
+    assert _latency_ratios(rows) == []
+
+
+def test_error_rates_per_impl():
+    recs = [_rec(impl="a", i=1), _rec(impl="a", i=2, run_error="boom"),
+            _rec(impl="b", i=1)]
+    rows = aggregate(recs)
+    text = "\n".join(_error_rates(rows))
+    assert "`a`: 1/2 (50.0%)" in text
+    assert "`b`: 0/1 (0.0%)" in text
+
+
+def test_shared_worst_utterances_flags_overlap(make_utt):
+    recs = [_rec(impl="a", i=1, e2e=0.1), _rec(impl="b", i=1, e2e=0.2),
+            _rec(impl="a", i=2, e2e=0.9)]
+    utts = {"u001": make_utt(1), "u002": make_utt(2)}
+    worst = worst_utterances(recs, utts, k=10)
+    text = "\n".join(_shared_worst_utterances(worst))
+    assert "u001" in text
+    assert "u002" not in text
+
+
+def test_shared_worst_utterances_empty_when_no_overlap(make_utt):
+    recs = [_rec(impl="a", i=1, e2e=0.1), _rec(impl="b", i=2, e2e=0.2)]
+    utts = {"u001": make_utt(1), "u002": make_utt(2)}
+    worst = worst_utterances(recs, utts, k=10)
+    assert _shared_worst_utterances(worst) == []
+
+
+def test_render_analysis_omitted_for_single_impl():
+    recs = [_rec(i=1)]
+    rows = aggregate(recs)
+    assert render_analysis(rows, []) == []
+
+
+def test_render_report_analysis_section_present_for_multi_impl():
+    recs = [_rec(impl="a", i=1, wer=0.1, e2e=0.9),
+            _rec(impl="b", i=1, wer=0.3, e2e=0.5)]
+    rows = aggregate(recs)
+    text = render_report(rows, [])
+    assert "## Analysis" in text
+    assert "errors" in text
