@@ -74,8 +74,20 @@ No silero VAD model is needed — eval mode skips VAD by design.
 
 ## Configure the impl
 
+Each impl under `impls/` needs its own `local.toml` (git-ignored) — copy the
+example that matches the impl(s) you'll run and edit the paths:
+
     cp impls/m2v_default/local.toml.example impls/m2v_default/local.toml
-    # edit paths to your exe + models (local.toml is git-ignored)
+    cp impls/m2v_sherpa/local.toml.example impls/m2v_sherpa/local.toml
+
+- `m2v_default` — PhoWhisper + Marian ONNX + Supertonic (models from the
+  "Models" section above).
+- `m2v_sherpa` — sherpa-onnx ASR + Marian MT + StyleTTS2; needs its own
+  sherpa model dir, a StyleTTS2 python venv + server script, and a
+  reference voice wav. See `impls/m2v_sherpa/local.toml.example`.
+
+Impls are auto-discovered from `impls/`, so both are available as `--impl`
+values once configured.
 
 ## Quickstart
 
@@ -83,6 +95,11 @@ No silero VAD model is needed — eval mode skips VAD by design.
     voice-suite run   --impl m2v_default --limit 20 --seed 0
     voice-suite score --limit 20 --seed 0 --workers 4     # judge via Claude CLI
     voice-suite report                          # out/report.md + stdout
+
+`report` includes a metric glossary and a mechanical cross-impl analysis
+(leader/gap per metric, latency ratios, error rates, shared-worst
+utterances) whenever more than one impl has been scored. Full metric
+definitions: `docs/metrics.md`.
 
 Free offline path (WER + latency only, no judge, no back-transcription):
 
