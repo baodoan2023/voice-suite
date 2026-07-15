@@ -1,0 +1,8 @@
+# impls/m2v_sherpa/local.toml — machine-local paths (git-ignored)
+exe = "C:/project/training_ai/my-2nd-voice/target/release/eval-batch.exe"
+sherpa_model_dir = "C:/project/training_ai/my-2nd-voice/models/asr/sherpa-vi"
+mt_dir = "C:/project/training_ai/my-2nd-voice/models/mt/vi-en"
+tts_venv = "C:/project/training_ai/my-2nd-voice/.venv-styletts2"
+tts_server_script = "C:/project/training_ai/my-2nd-voice/scripts/styletts2_server.py"
+tts_ref_wav = "C:/project/training_ai/my-2nd-voice/assets/voice_ref/tsa/ref.wav"
+# extra_args = ["--beam-size", "5"]
