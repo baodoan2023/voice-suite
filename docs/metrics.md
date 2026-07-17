@@ -59,7 +59,7 @@ def score_wer(ref: str, hyp: str) -> float:
 
 - Standard word error rate (`jiwer.wer`): `(substitutions + deletions + insertions) / reference_word_count`.
 - Both strings are normalized first: Unicode NFC, lowercased, punctuation replaced with spaces (`\w` is Unicode-aware, so Vietnamese diacritics like `đ`, `ệ`, `ỳ` are preserved as word characters, not stripped).
-- **Capped at 1.0.** Raw WER can exceed 1.0 when the hypothesis has a lot of extra (inserted) words — e.g. a hallucinating ASR. The cap keeps one runaway hallucination from dragging a whole leaderboard mean below every other row disproportionately.
+- **Capped at 1.0**, i.e. 100% — a ratio of edits to reference word count, not a count of words or seconds. Raw WER can exceed 1.0 when the hypothesis has a lot of extra (inserted) words — e.g. a hallucinating ASR. The cap keeps one runaway hallucination from dragging a whole leaderboard mean below every other row disproportionately.
 - Edge case: empty reference → `0.0` if the hypothesis is also empty (both silent, trivially "correct"), else `1.0` (can't compute a ratio against zero reference words, so it's scored as fully wrong).
 - Always computed, for every record, regardless of `--no-judge`. This is your only *guaranteed* signal — it never needs a judge, back-transcription, or network access, only the ASR text your impl already produced and the manifest's `ref_transcript`.
 - A pipeline failure (impl crashed on that utterance) still gets a real WER: an empty `asr_text` against a non-empty reference computes to `1.0` (worst case), which is intentional — a config that crashes should rank worse, not get a free pass by being excluded.
@@ -267,3 +267,26 @@ regardless of who's judging them.
 | `--model <id>` | Judge model id (default `claude-opus-4-8`); part of `judge_id`, so changing it re-scores everything under the new id. |
 | `--workers N` | Parallel judge calls (network-bound); back-transcription always runs sequentially first regardless of `--workers`. |
 | `--limit` / `--seed` | Must match the values used on `run` — they select which sampled utterances get scored, not how they're scored. |
+
+## 13. Using a different judge model/provider
+
+Both current backends (`--judge cli` / `--judge api`) call Claude — there is no
+built-in support for other providers (GPT/Codex, Qwen, etc.) today. The seam to
+add one already exists, though: `get_judge()` returns a `JudgeFn = Callable[[str],
+dict]`, and `score_utterance()` only requires that function to accept the rubric
+prompt and return a dict with `mt_adequacy`, `mt_fluency`, `e2e_adequacy`,
+`verdict`, `rationale` (`voice_suite/scoring/judge.py`).
+
+To add a provider: write one function with that signature (see `_cli_judge` /
+`_anthropic_judge` for the shape), and add a branch to `get_judge()` that returns
+it for a new `--judge` value.
+
+Two things to know before doing this:
+
+- **Cache is judge-aware already.** `judge_id` (`"<backend>:<model>"`) is part of
+  `score_key` (section 10 above), so a new backend gets its own cache entries
+  automatically — it can't collide with or silently reuse Claude's cached scores.
+- **Scores aren't comparable across judges.** Different models calibrate
+  `mt_adequacy`/`mt_fluency`/`e2e_adequacy` differently, so a leaderboard mixing
+  rows judged by different backends isn't a fair comparison. Judge everything
+  you intend to compare with the same `--judge`/`--model`.
