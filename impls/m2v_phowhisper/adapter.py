@@ -18,7 +18,7 @@ _REQUIRED_KEYS = ("exe", "whisper_model", "mt_dir", "tts_onnx_dir",
                   "tts_voice_style")
 
 _TEMPLATE = """\
-# impls/m2v_default/local.toml — machine-local paths (git-ignored)
+# impls/m2v_phowhisper/local.toml — machine-local paths (git-ignored)
 exe = "C:/project/training_ai/my-2nd-voice/target/release/eval_batch.exe"
 whisper_model = "C:/project/training_ai/my-2nd-voice/models/whisper/ggml-phowhisper-small-tsa.bin"
 mt_dir = "C:/project/training_ai/my-2nd-voice/models/mt/vi-en"
@@ -31,7 +31,7 @@ tts_voice_style = "C:/project/training_ai/my-2nd-voice/models/tts/supertonic-3/v
 class M2vBatchImpl:
     """VoiceImpl adapter around one eval_batch invocation per batch."""
 
-    def __init__(self, name: str = "m2v_default",
+    def __init__(self, name: str = "m2v_phowhisper",
                  config_path: Path | None = None,
                  cmd: list[str] | None = None):
         self.name = name

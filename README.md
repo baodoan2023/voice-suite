@@ -77,22 +77,24 @@ No silero VAD model is needed — eval mode skips VAD by design.
 Each impl under `impls/` needs its own `local.toml` (git-ignored) — copy the
 example that matches the impl(s) you'll run and edit the paths:
 
-    cp impls/m2v_default/local.toml.example impls/m2v_default/local.toml
+    cp impls/m2v_phowhisper/local.toml.example impls/m2v_phowhisper/local.toml
     cp impls/m2v_sherpa/local.toml.example impls/m2v_sherpa/local.toml
 
-- `m2v_default` — PhoWhisper + Marian ONNX + Supertonic (models from the
+- `m2v_phowhisper` — PhoWhisper + Marian ONNX + Supertonic (models from the
   "Models" section above).
 - `m2v_sherpa` — sherpa-onnx ASR + Marian MT + StyleTTS2; needs its own
   sherpa model dir, a StyleTTS2 python venv + server script, and a
   reference voice wav. See `impls/m2v_sherpa/local.toml.example`.
 
 Impls are auto-discovered from `impls/`, so both are available as `--impl`
-values once configured.
+values once configured. Impl ids follow `m2v_{asr_model}` — named after the
+ASR engine, since that's what most defines a pipeline's character (e.g.
+`m2v_phowhisper`, `m2v_sherpa`); name new impls the same way.
 
 ## Quickstart
 
     voice-suite ingest --n 200 --seed 0        # FLEURS vi_vn ⋈ en_us → data/
-    voice-suite run   --impl m2v_default --limit 20 --seed 0
+    voice-suite run   --impl m2v_phowhisper --limit 20 --seed 0
     voice-suite score --limit 20 --seed 0 --workers 4     # judge via Claude CLI
     voice-suite report                          # out/report.md + stdout
 
@@ -118,7 +120,7 @@ scores cache per content+judge, back-transcripts cache per audio hash.
     M2V_TTS_VOICE_STYLE=models/tts/supertonic-3/voice_styles/M1.json \
     cargo test --test eval_batch_smoke -- --nocapture
 
-Then the real thing end-to-end: `voice-suite run --impl m2v_default --limit 2`
+Then the real thing end-to-end: `voice-suite run --impl m2v_phowhisper --limit 2`
 followed by `voice-suite score --limit 2 --no-judge` and `voice-suite report`.
 
 ## Tests

@@ -1,4 +1,4 @@
-# impls/m2v_default/local.toml — machine-local paths (git-ignored)
+# impls/m2v_phowhisper/local.toml — machine-local paths (git-ignored)
 exe = "C:/project/training_ai/my-2nd-voice/target/release/eval_batch.exe"
 whisper_model = "C:/project/training_ai/my-2nd-voice/models/whisper/ggml-phowhisper-small-tsa.bin"
 mt_dir = "C:/project/training_ai/my-2nd-voice/models/mt/vi-en"

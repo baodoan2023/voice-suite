@@ -28,7 +28,7 @@ def test_voice_result_defaults():
 
 
 def test_raw_record_json_roundtrip(make_utt, make_result):
-    rec = RawRecord(impl="m2v_default", utt_id=make_utt().id, result=make_result())
+    rec = RawRecord(impl="m2v_phowhisper", utt_id=make_utt().id, result=make_result())
     line = rec.model_dump_json()
     assert RawRecord.model_validate_json(line) == rec
 

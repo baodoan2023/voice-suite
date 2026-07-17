@@ -40,7 +40,7 @@ def discover_impls(impls_dir: Path) -> dict[str, VoiceImpl]:
     base = Path(impls_dir)
     if not base.exists():
         return found
-    # Impls use absolute imports (``from impls.m2v_default.adapter import …``),
+    # Impls use absolute imports (``from impls.m2v_phowhisper.adapter import …``),
     # so the impls dir's parent must be importable regardless of how the CLI
     # was launched (the console script has only the venv bin on sys.path).
     root = str(base.resolve().parent)

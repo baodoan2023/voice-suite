@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from voice_suite.aggregate import (
     _error_rates,
+    _impl_legend,
     _latency_ratios,
     _metric_deltas,
     _pct,
@@ -191,3 +192,47 @@ def test_render_report_analysis_section_present_for_multi_impl():
     text = render_report(rows, [])
     assert "## Analysis" in text
     assert "errors" in text
+
+
+def test_render_report_leads_with_e2e_then_wer():
+    rows = aggregate([_rec(i=1)])
+    text = render_report(rows, [])
+    assert "| Rank | Impl | n | e2e_adequacy↑ | WER↓ |" in text
+
+
+def test_render_report_note_below_table():
+    rows = aggregate([_rec(i=1)])
+    text = render_report(rows, [])
+    assert "Ranked by e2e_adequacy (desc), then WER (asc).\n\n|" in text
+    assert "**Note:** Judge means exclude judge-errored records; " \
+           "pipeline errors count as zeros." in text
+
+
+def test_impl_legend_known_impl():
+    rows = aggregate([_rec(impl="m2v_phowhisper", i=1)])
+    legend = _impl_legend(rows)
+    assert legend == ["- `m2v_phowhisper` = PhoWhisper (ASR) + Marian ONNX "
+                      "(MT) + Supertonic (TTS)"]
+
+
+def test_impl_legend_omits_unknown_impl():
+    rows = aggregate([_rec(impl="a", i=1)])
+    assert _impl_legend(rows) == []
+
+
+def test_metrics_glossary_defines_n_and_expands_abbreviations():
+    text = "\n".join(render_metrics_glossary())
+    assert "| `n` |" in text
+    assert "automatic speech recognition" in text
+    assert "machine translation" in text
+    assert "milliseconds" in text
+    assert "50th/95th percentile" in text
+    assert "100%" in text
+
+
+def test_worst_utterances_heading_notes_pooled_across_impls(make_utt):
+    recs = [_rec(i=1)]
+    rows = aggregate(recs)
+    worst = worst_utterances(recs, {"u001": make_utt(1)})
+    text = render_report(rows, worst)
+    assert "## Worst utterances (lowest e2e_adequacy, pooled across all impls)" in text

@@ -1,8 +1,8 @@
 """Batch adapter: shells out to my-2nd-voice's eval-batch binary (Sherpa ASR
 + Marian MT + StyleTTS2).
 
-Same eval_batch manifest/results.jsonl contract as m2v_default; only the
-model config and CLI flags differ. See impls/m2v_default/adapter.py for the
+Same eval_batch manifest/results.jsonl contract as m2v_phowhisper; only the
+model config and CLI flags differ. See impls/m2v_phowhisper/adapter.py for the
 shared design notes.
 """
 from __future__ import annotations

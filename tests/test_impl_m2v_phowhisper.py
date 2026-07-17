@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from impls.m2v_default.adapter import M2vBatchImpl
+from impls.m2v_phowhisper.adapter import M2vBatchImpl
 
 FAKE = Path(__file__).parent / "fake_eval_batch.py"
 
