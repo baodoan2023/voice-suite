@@ -5,6 +5,12 @@ from voice_suite.protocol import ScoredRecord, Utterance
 
 WORST_K = 10
 
+# Real model stack behind each impl id, for the report legend (render_report).
+_DISPLAY_NAMES = {
+    "m2v_phowhisper": "PhoWhisper (ASR) + Marian ONNX (MT) + Supertonic (TTS)",
+    "m2v_sherpa": "sherpa-onnx (ASR) + Marian ONNX (MT) + StyleTTS2 (TTS)",
+}
+
 
 def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
@@ -129,6 +135,12 @@ def _error_rates(rows: list[dict]) -> list[str]:
     return lines
 
 
+def _impl_legend(rows: list[dict]) -> list[str]:
+    """One line per impl naming its real model stack, when known."""
+    return [f"- `{r['impl']}` = {_DISPLAY_NAMES[r['impl']]}"
+            for r in rows if r["impl"] in _DISPLAY_NAMES]
+
+
 def _shared_worst_utterances(worst: list[dict]) -> list[str]:
     """Utterance ids that landed in more than one impl's worst-k list."""
     by_utt: dict[str, list[str]] = {}
@@ -157,10 +169,18 @@ def render_metrics_glossary() -> list[str]:
     """Static glossary of every leaderboard column. Full depth: docs/metrics.md."""
     return [
         "## Metric definitions", "",
+        "ASR (automatic speech recognition), MT (machine translation), "
+        "ms (milliseconds), P50/P95 (50th/95th percentile). Rows marked "
+        "(LLM judge) are scored by Claude (a large language model) "
+        "reading the text and rating it 0.0-1.0, rather than a fixed "
+        "formula like WER; run with `score --no-judge` and they're "
+        "always 0.0.", "",
         "| Metric | Meaning | Direction |",
         "|---|---|---|",
-        "| `WER` | ASR transcript vs. reference transcript word error rate "
-        "(capped at 1.0) | lower is better |",
+        "| `n` | Number of evaluated utterances | — |",
+        "| `WER` | ASR transcript vs. reference transcript word error rate: "
+        "edits ÷ reference word count, capped at 1.0 (1.0 = 100%, i.e. "
+        "fully wrong) | lower is better |",
         "| `mt_adequacy` | Does the MT output preserve the reference "
         "translation's meaning? (LLM judge) | higher is better |",
         "| `mt_fluency` | Is the MT output natural, grammatical English? "
@@ -184,24 +204,25 @@ def render_report(rows: list[dict], worst: list[dict]) -> str:
     """Render the leaderboard + worst-utterances appendix as markdown."""
     lines = [
         "# voice-suite Leaderboard", "",
-        "Ranked by e2e_adequacy (desc), then WER (asc). Judge means exclude "
-        "judge-errored records; pipeline errors count as zeros.", "",
-        "| Rank | Impl | n | WER↓ | mt_adequacy↑ | mt_fluency↑ | "
-        "e2e_adequacy↑ | asr_ms P50/P95 | mt_ms P50/P95 | tts_ms P50/P95 | "
+        "Ranked by e2e_adequacy (desc), then WER (asc).", "",
+        "| Rank | Impl | n | e2e_adequacy↑ | WER↓ | mt_adequacy↑ | "
+        "mt_fluency↑ | asr_ms P50/P95 | mt_ms P50/P95 | tts_ms P50/P95 | "
         "errors |",
-        "|------|------|---|------|--------------|-------------|"
-        "---------------|----------------|---------------|----------------|"
+        "|------|------|---|---------------|------|--------------|"
+        "-------------|----------------|---------------|----------------|"
         "--------|",
     ]
     for i, r in enumerate(rows, 1):
         lines.append(
-            f"| {i} | {r['impl']} | {r['scored']} | {r['mean_wer']:.3f} | "
+            f"| {i} | {r['impl']} | {r['scored']} | "
+            f"{r['e2e_adequacy']:.3f} | {r['mean_wer']:.3f} | "
             f"{r['mt_adequacy']:.3f} | {r['mt_fluency']:.3f} | "
-            f"{r['e2e_adequacy']:.3f} | "
             f"{r['asr_ms_p50']}/{r['asr_ms_p95']} | "
             f"{r['mt_ms_p50']}/{r['mt_ms_p95']} | "
             f"{r['tts_ms_p50']}/{r['tts_ms_p95']} | {r['errors']} |"
         )
+    lines += ["", "**Note:** Judge means exclude judge-errored records; "
+                  "pipeline errors count as zeros.", *_impl_legend(rows)]
     for r in rows:
         if r["judge_errors"]:
             lines.append(f"\n{r['impl']}: {r['judge_errors']} judge call(s) "
@@ -211,7 +232,8 @@ def render_report(rows: list[dict], worst: list[dict]) -> str:
     lines += ["", *render_metrics_glossary()]
     lines += render_analysis(rows, worst)
     if worst:
-        lines += ["", "## Worst utterances (lowest e2e_adequacy)", ""]
+        lines += ["", "## Worst utterances (lowest e2e_adequacy, pooled "
+                      "across all impls)", ""]
         for w in worst:
             lines += [
                 f"### {w['utt_id']} — {w['impl']} "
