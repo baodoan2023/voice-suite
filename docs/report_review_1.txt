@@ -1,0 +1,15 @@
+1. m2v_default -> should put name of real model
+
+2. what is column n ? 
+
+3. Ranked by e2e_adequacy (desc), then WER (asc). -> The e2e_adequacy column should come before the WER column. The best practice is for m2v_sherpa to be based primarily on two criteria, so those two columns should come first.
+
+4. Judge means exclude judge-errored records; pipeline errors count as zeros. -> This sentence should be placed as a "Note:" right below the table.
+
+5. ASR transcript vs. reference transcript word error rate (capped at 1.0) -> The 1.0 part is unclear; is it 1 word, 1 second, or something else?
+
+6. In the Metric definitions section, add parentheses to explain less common abbreviations: ASR, MT, MS, P50/P95
+
+7. Are the 10 Worst Utterances questions among the 15 test files?
+
+8. The test data should include characteristics such as male/female voice, northern/central/southern accent, or mixed accent.
