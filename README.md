@@ -51,25 +51,21 @@ dir — transformers.js/optimum layout). `Xenova/opus-mt-vi-en` ships these:
     cp /tmp/opus-vi-en/onnx/encoder_model_quantized.onnx models/mt/vi-en/
     cp /tmp/opus-vi-en/onnx/decoder_model_quantized.onnx models/mt/vi-en/
 
-### 3. Supertonic TTS — `models/tts/supertonic-3/`
+### 3. StyleTTS2 — `.venv-styletts2/` + a reference voice wav
 
-The download recipe exists on the app repo's `origin/feat/python-setup`
-branch; read it and port the paths:
-
-    git -C ../my-2nd-voice show origin/feat/python-setup:download_supertonic.sh
-
-It fetches the `Supertone/supertonic-3` HF repo: the ONNX dir (`tts.json`,
-four `.onnx` files, `unicode_indexer.json`) plus `voice_styles/*.json`.
-Point `tts_onnx_dir` at the ONNX dir and `tts_voice_style` at an **English**
-voice style JSON.
+All three impls synthesize through the same StyleTTS2 python venv + server
+script (`scripts/styletts2_server.py`), not Supertonic. One-time setup and a
+voice-cloning walkthrough: `my-2nd-voice/docs/styletts2-voice-setup.md`
+(`scripts/install-venv-styletts2.sh` creates the venv; record ~10s of
+reference speech to a wav and point `tts_ref_wav` at it).
 
 No silero VAD model is needed — eval mode skips VAD by design.
 
 ### 4. Build the eval binary
 
     cd ../my-2nd-voice
-    cargo build --release --bin eval_batch
-    # GPU: cargo build --release --features cuda --bin eval_batch
+    cargo build --release --bin eval-batch
+    # GPU: cargo build --release --features cuda --bin eval-batch
     #      (cuDNN DLLs next to the exe, per the app's run scripts)
 
 ## Configure the impl
@@ -79,17 +75,25 @@ example that matches the impl(s) you'll run and edit the paths:
 
     cp impls/m2v_phowhisper/local.toml.example impls/m2v_phowhisper/local.toml
     cp impls/m2v_sherpa/local.toml.example impls/m2v_sherpa/local.toml
+    cp impls/m2v_nemotron/local.toml.example impls/m2v_nemotron/local.toml
 
-- `m2v_phowhisper` — PhoWhisper + Marian ONNX + Supertonic (models from the
-  "Models" section above).
+- `m2v_phowhisper` — PhoWhisper + Marian ONNX + StyleTTS2; needs the
+  PhoWhisper ggml model (see "Models" above) plus a StyleTTS2 python venv +
+  server script and a reference voice wav. See
+  `impls/m2v_phowhisper/local.toml.example`.
 - `m2v_sherpa` — sherpa-onnx ASR + Marian MT + StyleTTS2; needs its own
   sherpa model dir, a StyleTTS2 python venv + server script, and a
   reference voice wav. See `impls/m2v_sherpa/local.toml.example`.
+- `m2v_nemotron` — NVIDIA Nemotron streaming ASR + Marian MT + StyleTTS2;
+  needs its own Nemotron python venv + server script, plus the same
+  StyleTTS2 venv + server script and reference voice wav as the other
+  impls. See `impls/m2v_nemotron/local.toml.example`.
 
-Impls are auto-discovered from `impls/`, so both are available as `--impl`
-values once configured. Impl ids follow `m2v_{asr_model}` — named after the
-ASR engine, since that's what most defines a pipeline's character (e.g.
-`m2v_phowhisper`, `m2v_sherpa`); name new impls the same way.
+Impls are auto-discovered from `impls/`, so all three are available as
+`--impl` values once configured. Impl ids follow `m2v_{asr_model}` — named
+after the ASR engine, since that's what most defines a pipeline's character
+(e.g. `m2v_phowhisper`, `m2v_sherpa`, `m2v_nemotron`); name new impls the
+same way.
 
 ## Quickstart
 
@@ -113,12 +117,18 @@ scores cache per content+judge, back-transcripts cache per audio hash.
 
 ## Manual smoke (models required)
 
+Run `eval-batch` directly against a tiny manifest, bypassing the harness:
+
     cd ../my-2nd-voice
-    M2V_WHISPER_MODEL=models/whisper/ggml-phowhisper-small-tsa.bin \
-    M2V_MT_DIR=models/mt/vi-en \
-    M2V_TTS_ONNX_DIR=models/tts/supertonic-3/onnx \
-    M2V_TTS_VOICE_STYLE=models/tts/supertonic-3/voice_styles/M1.json \
-    cargo test --test eval_batch_smoke -- --nocapture
+    cargo run --release --bin eval-batch -- \
+      --sherpa-model-dir models/asr/sherpa-vi \
+      --mt-dir models/mt/vi-en \
+      --tts-venv .venv-styletts2 --tts-ref-wav assets/voice_ref/tsa/ref.wav \
+      --src vi --dst en \
+      --manifest manifest.jsonl --out-dir out/
+
+(Swap the ASR flags for `--whisper-model <path>` or `--nemotron-venv <path>`
+to smoke-test a different impl's ASR backend instead.)
 
 Then the real thing end-to-end: `voice-suite run --impl m2v_phowhisper --limit 2`
 followed by `voice-suite score --limit 2 --no-judge` and `voice-suite report`.
