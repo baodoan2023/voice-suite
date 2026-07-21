@@ -7,3 +7,4 @@ data/
 out/audio/
 impls/*/local.toml
 .coverage
+.idea/
