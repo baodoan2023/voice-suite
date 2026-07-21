@@ -7,8 +7,9 @@ WORST_K = 10
 
 # Real model stack behind each impl id, for the report legend (render_report).
 _DISPLAY_NAMES = {
-    "m2v_phowhisper": "PhoWhisper (ASR) + Marian ONNX (MT) + Supertonic (TTS)",
+    "m2v_phowhisper": "PhoWhisper (ASR) + Marian ONNX (MT) + StyleTTS2 (TTS)",
     "m2v_sherpa": "sherpa-onnx (ASR) + Marian ONNX (MT) + StyleTTS2 (TTS)",
+    "m2v_nemotron": "Nemotron (ASR) + Marian ONNX (MT) + StyleTTS2 (TTS)",
 }
 
 

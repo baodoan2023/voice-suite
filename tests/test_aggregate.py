@@ -212,7 +212,7 @@ def test_impl_legend_known_impl():
     rows = aggregate([_rec(impl="m2v_phowhisper", i=1)])
     legend = _impl_legend(rows)
     assert legend == ["- `m2v_phowhisper` = PhoWhisper (ASR) + Marian ONNX "
-                      "(MT) + Supertonic (TTS)"]
+                      "(MT) + StyleTTS2 (TTS)"]
 
 
 def test_impl_legend_omits_unknown_impl():
