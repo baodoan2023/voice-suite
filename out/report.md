@@ -4,14 +4,16 @@ Ranked by e2e_adequacy (desc), then WER (asc).
 
 | Rank | Impl | n | e2e_adequacy↑ | WER↓ | mt_adequacy↑ | mt_fluency↑ | asr_ms P50/P95 | mt_ms P50/P95 | tts_ms P50/P95 | errors |
 |------|------|---|---------------|------|--------------|-------------|----------------|---------------|----------------|--------|
-| 1 | m2v_sherpa | 15 | 0.443 | 0.186 | 0.445 | 0.640 | 394/596 | 784/1171 | 9166/15272 | 1 |
-| 2 | m2v_phowhisper | 15 | 0.301 | 0.271 | 0.301 | 0.533 | 58427/67021 | 512/1043 | 4171/5521 | 0 |
+| 1 | m2v_nemotron | 15 | 0.465 | 0.178 | 0.489 | 0.637 | 38708/67827 | 557/1033 | 9356/14584 | 0 |
+| 2 | m2v_sherpa | 15 | 0.443 | 0.186 | 0.445 | 0.640 | 394/596 | 784/1171 | 9166/15272 | 1 |
+| 3 | m2v_phowhisper | 15 | 0.301 | 0.271 | 0.301 | 0.533 | 58427/67021 | 512/1043 | 4171/5521 | 0 |
 
 **Note:** Judge means exclude judge-errored records; pipeline errors count as zeros.
+- `m2v_nemotron` = Nemotron (ASR) + Marian ONNX (MT) + StyleTTS2 (TTS)
 - `m2v_sherpa` = sherpa-onnx (ASR) + Marian ONNX (MT) + StyleTTS2 (TTS)
-- `m2v_phowhisper` = PhoWhisper (ASR) + Marian ONNX (MT) + Supertonic (TTS)
+- `m2v_phowhisper` = PhoWhisper (ASR) + Marian ONNX (MT) + StyleTTS2 (TTS)
 
-**Best implementation: `m2v_sherpa`**
+**Best implementation: `m2v_nemotron`**
 
 ## Metric definitions
 
@@ -31,13 +33,14 @@ Pipeline-error and judge-error records count as `0.0` in the judge-score means (
 
 ## Analysis
 
-- **WER**: `m2v_sherpa` leads at 0.186 vs `m2v_phowhisper` at 0.271 (0.085 gap).
-- **mt_adequacy**: `m2v_sherpa` leads at 0.445 vs `m2v_phowhisper` at 0.301 (0.143 gap).
+- **WER**: `m2v_nemotron` leads at 0.178 vs `m2v_phowhisper` at 0.271 (0.094 gap).
+- **mt_adequacy**: `m2v_nemotron` leads at 0.489 vs `m2v_phowhisper` at 0.301 (0.187 gap).
 - **mt_fluency**: `m2v_sherpa` leads at 0.640 vs `m2v_phowhisper` at 0.533 (0.107 gap).
-- **e2e_adequacy**: `m2v_sherpa` leads at 0.443 vs `m2v_phowhisper` at 0.301 (0.142 gap).
+- **e2e_adequacy**: `m2v_nemotron` leads at 0.465 vs `m2v_phowhisper` at 0.301 (0.164 gap).
 - **asr_ms P50**: `m2v_sherpa` is 148.3x faster than `m2v_phowhisper` (394 vs 58427 ms).
 - **mt_ms P50**: `m2v_phowhisper` is 1.5x faster than `m2v_sherpa` (512 vs 784 ms).
-- **tts_ms P50**: `m2v_phowhisper` is 2.2x faster than `m2v_sherpa` (4171 vs 9166 ms).
+- **tts_ms P50**: `m2v_phowhisper` is 2.2x faster than `m2v_nemotron` (4171 vs 9356 ms).
+- **errors**: `m2v_nemotron`: 0/15 (0.0%).
 - **errors**: `m2v_sherpa`: 1/15 (6.7%).
 - **errors**: `m2v_phowhisper`: 0/15 (0.0%).
 - **shared difficulty**: 3 utterance(s) challenged more than one impl (not impl-specific): fleurs-001805_male_southern_mix_sentence, fleurs-001891_male_southern_complex_sentence, fleurs-001997_male_southern.
@@ -95,6 +98,13 @@ Pipeline-error and judge-error records count as `0.0` in the judge-score means (
 - audio back-transcript (en): No warning of any spirit life or spirit is given and, according to the geophysics, Duraka will not have any warning of life because the antirestrial facility has not yet taken a 6.5-degree shot of silk.
 - ref translation (en): no tsunami warning has been issued and according to the jakarta geophysics agency no tsunami warning will be issued because the quake did not meet the magnitude 6.5 requirement
 
+### fleurs-001714_male_southern — m2v_nemotron (e2e 0.10, WER 0.18)
+- ref (vi): vệ tinh được đưa vào vũ trụ bằng tên lửa các nhà khoa học sử dụng kính thiên văn trong không gian vì bầu khí quyển của trái đất làm biến dạng một số ánh sáng và hình ảnh quan sát của chúng ta
+- asr (vi): Vệ tin được đưa vào vũ trụ bằng tên ở các nhà khoa học sẽ sử dụng kính tin dân trong không gian vì bầu khuy biển của Trái Đất làm biến nhà một số ánh sáng và hình ảnh quan sát của chúng ta.
+- mt (en): The Guardians are brought into space by name in scientists who will use the interdimensional glass because the Earth's sea-spot makes a few of our light and visual images of us.
+- audio back-transcript (en): the guardians are brought in space by name in scientists who will use the inter-dimensional glass because the earth's sea-spat makes a few of our light and visual images of us
+- ref translation (en): the satellite was sent into space by a rocket scientists use telescopes in space because the earth's atmosphere distorts some of our light and view
+
 ### fleurs-001757_male_southern — m2v_phowhisper (e2e 0.10, WER 0.18)
 - ref (vi): chỉ các đột biến ở tế bào dòng vi khuẩn mới có thể di truyền sang con cái trong khi đột biến ở nơi khác có thể gây chết tế bào hay ung thư
 - asr (vi): Chỉ các độc biến ở tế bào dòng vi phẩm mới có thể di chuyển sang con cái. Trong khi độc biến ở nơi, khác có thể gây chết tới bào hay ông thư.
@@ -108,10 +118,3 @@ Pipeline-error and judge-error records count as `0.0` in the judge-score means (
 - mt (en): Just like every male-pattern male- state park is going on every day and has to buy tickets to the park door.
 - audio back-transcript (en): just like every male pattern male state park is going on every day and has to buy tickets to the park door
 - ref translation (en): as with all south african national parks there are daily conservation and entry fees for the park
-
-### fleurs-001714_male_southern — m2v_phowhisper (e2e 0.15, WER 0.34)
-- ref (vi): vệ tinh được đưa vào vũ trụ bằng tên lửa các nhà khoa học sử dụng kính thiên văn trong không gian vì bầu khí quyển của trái đất làm biến dạng một số ánh sáng và hình ảnh quan sát của chúng ta
-- asr (vi): Vệ tin được đưa vào vũ trụ văn tin lỡ các nhà phá học sử dụng kiến tiên nhân trong phong gian vì bầu khuy biển cổ trái đất làm biến nhà một số ánh sáng và hình ảnh hoa xác của chúng ta.
-- mt (en): The Guardians are being brought into the text universe, and they're missing the scientists using the eye seers in space because the ancient Earth sea-spot changes home some of our light and image of our bodies.
-- audio back-transcript (en): The Guardians are being brought into the text universe, and they're missing the scientists using the eye seers in space, because the ancient Earth, C-Spot changes home some of our light and image of our bodies.
-- ref translation (en): the satellite was sent into space by a rocket scientists use telescopes in space because the earth's atmosphere distorts some of our light and view
