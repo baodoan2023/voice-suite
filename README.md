@@ -39,7 +39,36 @@ path: convert `vinai/PhoWhisper-small` with whisper.cpp's converter:
     # rename the produced ggml-model.bin to ggml-phowhisper-small-tsa.bin
     # (or point local.toml at whatever name you keep)
 
-### 2. Marian vi→en ONNX — `models/mt/vi-en/`
+### 2. Sherpa-onnx Zipformer VI — `models/asr/sherpa-vi/`
+
+Needs `encoder.onnx`, `decoder.onnx`, `joiner.onnx`, `tokens.txt`, `bpe.model`,
+plus a `.sha256` sidecar per ONNX/tokens file (my-2nd-voice's `SherpaAsr`
+loader verifies these on load). A download script already lives in that repo
+and writes the sidecars for you:
+
+    cd ../my-2nd-voice
+    python python/download_sherpa_vi.py --output-dir models/asr/sherpa-vi
+    # or on Windows: .\python\download_sherpa_vi.ps1
+
+Pulls the 68M Zipformer model from `csukuangfj/sherpa-onnx-zipformer-vi-2025-04-20`
+on HuggingFace and renames the epoch-suffixed files to the canonical names above.
+
+### 3. Nemotron venv — `.venv-nemo/`
+
+NVIDIA's Nemotron ASR runs as a bundled Python subprocess
+(`scripts/nemotron_asr_server.py`) instead of an ONNX/ggml model file — one-time
+venv setup, no separate model-download step:
+
+    cd ../my-2nd-voice
+    python -m venv .venv-nemo
+    .venv-nemo\Scripts\python.exe -m pip install "nemo_toolkit[asr]"   # Windows
+    # .venv-nemo/bin/python -m pip install "nemo_toolkit[asr]"          # macOS/Linux
+
+First inference downloads `nvidia/nemotron-3.5-asr-streaming-0.6b` from
+HuggingFace and caches it. CPU-only for now — expect ~38s P50 per utterance
+vs. Sherpa's ~0.4s (see `impls/m2v_nemotron/local.toml.example`).
+
+### 4. Marian vi→en ONNX — `models/mt/vi-en/`
 
 Needs exactly: `tokenizer.json`, `generation_config.json`,
 `encoder_model_quantized.onnx`, `decoder_model_quantized.onnx` (flat in the
@@ -51,7 +80,7 @@ dir — transformers.js/optimum layout). `Xenova/opus-mt-vi-en` ships these:
     cp /tmp/opus-vi-en/onnx/encoder_model_quantized.onnx models/mt/vi-en/
     cp /tmp/opus-vi-en/onnx/decoder_model_quantized.onnx models/mt/vi-en/
 
-### 3. StyleTTS2 — `.venv-styletts2/` + a reference voice wav
+### 5. StyleTTS2 — `.venv-styletts2/` + a reference voice wav
 
 All three impls synthesize through the same StyleTTS2 python venv + server
 script (`scripts/styletts2_server.py`), not Supertonic. One-time setup and a
@@ -61,7 +90,7 @@ reference speech to a wav and point `tts_ref_wav` at it).
 
 No silero VAD model is needed — eval mode skips VAD by design.
 
-### 4. Build the eval binary
+### 6. Build the eval binary
 
     cd ../my-2nd-voice
     cargo build --release --bin eval-batch
