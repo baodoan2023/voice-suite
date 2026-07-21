@@ -1,0 +1,9 @@
+# impls/m2v_nemotron/local.toml — machine-local paths (git-ignored)
+exe = "C:/project/training_ai/my-2nd-voice/target/release/eval-batch.exe"
+nemotron_venv = "C:/project/training_ai/my-2nd-voice/.venv-nemo"
+nemotron_server_script = "C:/project/training_ai/my-2nd-voice/scripts/nemotron_asr_server.py"
+mt_dir = "C:/project/training_ai/my-2nd-voice/models/mt/vi-en"
+tts_venv = "C:/project/training_ai/my-2nd-voice/.venv-styletts2"
+tts_server_script = "C:/project/training_ai/my-2nd-voice/scripts/styletts2_server.py"
+tts_ref_wav = "C:/project/training_ai/my-2nd-voice/assets/voice_ref/tsa/ref.wav"
+# extra_args = ["--nemotron-lang", "vi-VN", "--nemotron-model", "nvidia/nemotron-3.5-asr-streaming-0.6b"]

@@ -1,0 +1,121 @@
+"""Impl wrapper against the fake eval_batch: contract, ordering, failures."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+from impls.m2v_nemotron.adapter import M2vNemotronImpl
+
+FAKE = Path(__file__).parent / "fake_eval_batch.py"
+
+
+def _impl(*extra: str) -> M2vNemotronImpl:
+    return M2vNemotronImpl(cmd=[sys.executable, str(FAKE), *extra])
+
+
+def test_batch_results_in_input_order(tmp_path, make_utt):
+    impl = _impl()
+    impl.setup()
+    utts = [make_utt(2), make_utt(1)]  # deliberately unsorted
+    results = impl.translate_batch(utts, tmp_path)
+    assert [r.asr_text for r in results] == ["asr u002", "asr u001"]
+    assert results[0].mt_text == "mt u002"
+    assert results[0].timings.asr_ms == 10
+    assert results[0].error is None
+    assert all(Path(r.audio_path).exists() for r in results)
+
+
+def test_missing_id_becomes_error_result(tmp_path, make_utt):
+    impl = _impl("--skip-id", "u001")
+    impl.setup()
+    results = impl.translate_batch([make_utt(1), make_utt(2)], tmp_path)
+    assert results[0].error == "missing from eval_batch output"
+    assert results[1].error is None
+
+
+def test_nonzero_exit_raises_with_stderr(tmp_path, make_utt):
+    impl = _impl("--fail")
+    impl.setup()
+    with pytest.raises(RuntimeError, match="boom: model not found"):
+        impl.translate_batch([make_utt(1)], tmp_path)
+
+
+def test_setup_without_config_shows_template(tmp_path):
+    impl = M2vNemotronImpl(config_path=tmp_path / "local.toml")
+    with pytest.raises(RuntimeError, match="missing impl config"):
+        impl.setup()
+    with pytest.raises(RuntimeError, match="eval-batch.exe"):
+        impl.setup()  # template with example paths is embedded in the error
+
+
+def test_setup_flags_nonexistent_paths(tmp_path):
+    cfg = tmp_path / "local.toml"
+    cfg.write_text(
+        'exe = "does/not/exist.exe"\n'
+        'nemotron_venv = "x"\nnemotron_server_script = "y"\nmt_dir = "z"\n'
+        'tts_venv = "w"\ntts_server_script = "v"\ntts_ref_wav = "u"\n',
+        encoding="utf-8")
+    impl = M2vNemotronImpl(config_path=cfg)
+    with pytest.raises(RuntimeError, match="exe does not exist"):
+        impl.setup()
+
+
+def test_setup_flags_missing_keys(tmp_path):
+    cfg = tmp_path / "local.toml"
+    cfg.write_text('exe = "x"\n', encoding="utf-8")
+    impl = M2vNemotronImpl(config_path=cfg)
+    with pytest.raises(RuntimeError, match="missing keys"):
+        impl.setup()
+
+
+def test_setup_builds_command_from_config(tmp_path):
+    # Create real files for config paths
+    exe = tmp_path / "eval-batch.exe"
+    nemotron_venv = tmp_path / "nemotron_venv"
+    nemotron_server_script = tmp_path / "nemotron_asr_server.py"
+    mt_dir = tmp_path / "mt_dir"
+    tts_venv = tmp_path / "tts_venv"
+    tts_server_script = tmp_path / "styletts2_server.py"
+    tts_ref_wav = tmp_path / "ref.wav"
+
+    exe.touch()
+    nemotron_venv.mkdir()
+    nemotron_server_script.touch()
+    mt_dir.mkdir()
+    tts_venv.mkdir()
+    tts_server_script.touch()
+    tts_ref_wav.touch()
+
+    # Write valid local.toml with all required keys and extra_args
+    cfg = tmp_path / "local.toml"
+    cfg.write_text(
+        f'exe = "{exe.as_posix()}"\n'
+        f'nemotron_venv = "{nemotron_venv.as_posix()}"\n'
+        f'nemotron_server_script = "{nemotron_server_script.as_posix()}"\n'
+        f'mt_dir = "{mt_dir.as_posix()}"\n'
+        f'tts_venv = "{tts_venv.as_posix()}"\n'
+        f'tts_server_script = "{tts_server_script.as_posix()}"\n'
+        f'tts_ref_wav = "{tts_ref_wav.as_posix()}"\n'
+        'extra_args = ["--nemotron-lang", "vi-VN"]\n',
+        encoding="utf-8")
+
+    impl = M2vNemotronImpl(config_path=cfg)
+    impl.setup()
+
+    # Verify command construction with correct order
+    # Paths in TOML use forward slashes (as_posix()), so expected_cmd uses them too
+    expected_cmd = [
+        exe.as_posix(),
+        "--nemotron-venv", nemotron_venv.as_posix(),
+        "--nemotron-server-script", nemotron_server_script.as_posix(),
+        "--mt-dir", mt_dir.as_posix(),
+        "--tts-venv", tts_venv.as_posix(),
+        "--tts-server-script", tts_server_script.as_posix(),
+        "--tts-ref-wav", tts_ref_wav.as_posix(),
+        "--src", "vi",
+        "--dst", "en",
+        "--nemotron-lang", "vi-VN",
+    ]
+    assert impl._cmd == expected_cmd
