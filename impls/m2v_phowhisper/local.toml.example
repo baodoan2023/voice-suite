@@ -1,7 +1,8 @@
 # impls/m2v_phowhisper/local.toml — machine-local paths (git-ignored)
-exe = "C:/project/training_ai/my-2nd-voice/target/release/eval_batch.exe"
-whisper_model = "C:/project/training_ai/my-2nd-voice/models/whisper/ggml-phowhisper-small-tsa.bin"
+exe = "C:/project/training_ai/my-2nd-voice/target/release/eval-batch.exe"
+whisper_model = "C:/project/training_ai/my-2nd-voice/models/whisper/ggml-phowhisper-base.bin"
 mt_dir = "C:/project/training_ai/my-2nd-voice/models/mt/vi-en"
-tts_onnx_dir = "C:/project/training_ai/my-2nd-voice/models/tts/supertonic-3/onnx"
-tts_voice_style = "C:/project/training_ai/my-2nd-voice/models/tts/supertonic-3/voice_styles/M1.json"
+tts_venv = "C:/project/training_ai/my-2nd-voice/.venv-styletts2"
+tts_server_script = "C:/project/training_ai/my-2nd-voice/scripts/styletts2_server.py"
+tts_ref_wav = "C:/project/training_ai/my-2nd-voice/assets/voice_ref/tsa/ref.wav"
 # extra_args = ["--beam-size", "5"]

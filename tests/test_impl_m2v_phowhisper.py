@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from impls.m2v_phowhisper.adapter import M2vBatchImpl
+from impls.m2v_phowhisper.adapter import M2vPhoWhisperImpl
 
 FAKE = Path(__file__).parent / "fake_eval_batch.py"
 
 
-def _impl(*extra: str) -> M2vBatchImpl:
-    return M2vBatchImpl(cmd=[sys.executable, str(FAKE), *extra])
+def _impl(*extra: str) -> M2vPhoWhisperImpl:
+    return M2vPhoWhisperImpl(cmd=[sys.executable, str(FAKE), *extra])
 
 
 def test_batch_results_in_input_order(tmp_path, make_utt):
@@ -43,10 +43,10 @@ def test_nonzero_exit_raises_with_stderr(tmp_path, make_utt):
 
 
 def test_setup_without_config_shows_template(tmp_path):
-    impl = M2vBatchImpl(config_path=tmp_path / "local.toml")
+    impl = M2vPhoWhisperImpl(config_path=tmp_path / "local.toml")
     with pytest.raises(RuntimeError, match="missing impl config"):
         impl.setup()
-    with pytest.raises(RuntimeError, match="eval_batch.exe"):
+    with pytest.raises(RuntimeError, match="eval-batch.exe"):
         impl.setup()  # template with example paths is embedded in the error
 
 
@@ -55,8 +55,9 @@ def test_setup_flags_nonexistent_paths(tmp_path):
     cfg.write_text(
         'exe = "does/not/exist.exe"\n'
         'whisper_model = "x"\nmt_dir = "y"\n'
-        'tts_onnx_dir = "z"\ntts_voice_style = "w"\n', encoding="utf-8")
-    impl = M2vBatchImpl(config_path=cfg)
+        'tts_venv = "z"\ntts_server_script = "w"\ntts_ref_wav = "v"\n',
+        encoding="utf-8")
+    impl = M2vPhoWhisperImpl(config_path=cfg)
     with pytest.raises(RuntimeError, match="exe does not exist"):
         impl.setup()
 
@@ -64,24 +65,26 @@ def test_setup_flags_nonexistent_paths(tmp_path):
 def test_setup_flags_missing_keys(tmp_path):
     cfg = tmp_path / "local.toml"
     cfg.write_text('exe = "x"\n', encoding="utf-8")
-    impl = M2vBatchImpl(config_path=cfg)
+    impl = M2vPhoWhisperImpl(config_path=cfg)
     with pytest.raises(RuntimeError, match="missing keys"):
         impl.setup()
 
 
 def test_setup_builds_command_from_config(tmp_path):
     # Create real files for config paths
-    exe = tmp_path / "eval_batch.exe"
+    exe = tmp_path / "eval-batch.exe"
     whisper_model = tmp_path / "whisper_model.bin"
     mt_dir = tmp_path / "mt_dir"
-    tts_onnx_dir = tmp_path / "tts_onnx_dir"
-    tts_voice_style = tmp_path / "tts_voice_style.json"
+    tts_venv = tmp_path / "tts_venv"
+    tts_server_script = tmp_path / "styletts2_server.py"
+    tts_ref_wav = tmp_path / "ref.wav"
 
     exe.touch()
     whisper_model.touch()
     mt_dir.mkdir()
-    tts_onnx_dir.mkdir()
-    tts_voice_style.touch()
+    tts_venv.mkdir()
+    tts_server_script.touch()
+    tts_ref_wav.touch()
 
     # Write valid local.toml with all required keys and extra_args
     cfg = tmp_path / "local.toml"
@@ -89,12 +92,13 @@ def test_setup_builds_command_from_config(tmp_path):
         f'exe = "{exe.as_posix()}"\n'
         f'whisper_model = "{whisper_model.as_posix()}"\n'
         f'mt_dir = "{mt_dir.as_posix()}"\n'
-        f'tts_onnx_dir = "{tts_onnx_dir.as_posix()}"\n'
-        f'tts_voice_style = "{tts_voice_style.as_posix()}"\n'
+        f'tts_venv = "{tts_venv.as_posix()}"\n'
+        f'tts_server_script = "{tts_server_script.as_posix()}"\n'
+        f'tts_ref_wav = "{tts_ref_wav.as_posix()}"\n'
         'extra_args = ["--beam-size", "5"]\n',
         encoding="utf-8")
 
-    impl = M2vBatchImpl(config_path=cfg)
+    impl = M2vPhoWhisperImpl(config_path=cfg)
     impl.setup()
 
     # Verify command construction with correct order
@@ -103,8 +107,9 @@ def test_setup_builds_command_from_config(tmp_path):
         exe.as_posix(),
         "--whisper-model", whisper_model.as_posix(),
         "--mt-dir", mt_dir.as_posix(),
-        "--tts-onnx-dir", tts_onnx_dir.as_posix(),
-        "--tts-voice-style", tts_voice_style.as_posix(),
+        "--tts-venv", tts_venv.as_posix(),
+        "--tts-server-script", tts_server_script.as_posix(),
+        "--tts-ref-wav", tts_ref_wav.as_posix(),
         "--src", "vi",
         "--dst", "en",
         "--beam-size", "5",
