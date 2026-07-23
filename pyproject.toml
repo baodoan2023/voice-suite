@@ -14,6 +14,9 @@ dependencies = [
 dev = ["pytest>=8.0", "pytest-cov>=5.0"]
 ingest = ["datasets>=2.20,<3.0", "soundfile>=0.12", "librosa>=0.10", "numpy>=1.26"]
 bt = ["faster-whisper>=1.0"]
+asr = [
+    "sherpa-onnx>=1.10",
+]
 
 [project.scripts]
 voice-suite = "voice_suite.cli:app"

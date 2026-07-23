@@ -144,6 +144,24 @@ Use the SAME `--limit`/`--seed` on `run` and `score` so both select the same
 utterances. Re-runs are incremental: raw results cache per (impl, utterance),
 scores cache per content+judge, back-transcripts cache per audio hash.
 
+## WER-only benchmark with manual review (sherpa)
+
+Focused ASR track: sherpa zipformer only, no MT/TTS, WER as the single
+metric, with human adjudication instead of an LLM judge.
+
+    pip install -e '.[asr]'                    # sherpa-onnx
+    voice-suite asr-run                        # transcribe the whole manifest (~min, CPU)
+    voice-suite review                         # opens a local page: listen, see word
+                                               #   diffs, tick ops that are NOT real
+                                               #   errors (variants, spoken numbers)
+    voice-suite wer-report                     # out/wer_report.md: raw + adjudicated WER
+
+`asr-run` reuses `impls/m2v_sherpa/local.toml` for the model dir and is
+incremental (`out/asr_sherpa.jsonl`, append-only). Review decisions live in
+`out/wer_decisions.json` and survive re-runs; a decision is an accepted word
+op ("this sub/del/ins does not count"), so adjudicated WER = errors the
+reviewer left standing ÷ reference words.
+
 ## Manual smoke (models required)
 
 Run `eval-batch` directly against a tiny manifest, bypassing the harness:

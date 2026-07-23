@@ -19,6 +19,55 @@ def norm_text(s: str) -> str:
     return " ".join(s.split())
 
 
+WordOp = tuple[str, str, str]  # (op, ref_word, hyp_word); op ∈ sub|del|ins
+
+_OP_NAMES = {"substitute": "sub", "delete": "del", "insert": "ins"}
+
+
+def align(ref: str, hyp: str) -> list[WordOp]:
+    """Word-level error ops of hyp against ref, on normalized text.
+
+    Deterministic and in sentence order: review decisions reference ops by
+    index, so the order must be stable across runs. len(align()) equals the
+    uncapped edit count score_wer() is built on.
+    """
+    ref_n, hyp_n = norm_text(ref), norm_text(hyp)
+    if not ref_n and not hyp_n:
+        return []
+    if not ref_n:
+        return [("ins", "", w) for w in hyp_n.split()]
+    if not hyp_n:
+        return [("del", w, "") for w in ref_n.split()]
+    out = jiwer.process_words(ref_n, hyp_n)
+    refs, hyps = out.references[0], out.hypotheses[0]
+    ops: list[WordOp] = []
+    for chunk in out.alignments[0]:
+        if chunk.type == "equal":
+            continue
+        op = _OP_NAMES[chunk.type]
+        r_words = refs[chunk.ref_start_idx:chunk.ref_end_idx]
+        h_words = hyps[chunk.hyp_start_idx:chunk.hyp_end_idx]
+        for i in range(max(len(r_words), len(h_words))):
+            ops.append((op,
+                        r_words[i] if i < len(r_words) else "",
+                        h_words[i] if i < len(h_words) else ""))
+    return ops
+
+
+def adjudicated_wer(ref: str, hyp: str, accepted: set[int]) -> float:
+    """WER after a human reviewer accepts some ops as not-real-errors.
+
+    ``accepted`` holds indices into align(ref, hyp); stale indices are
+    ignored. Same cap and empty-ref conventions as score_wer.
+    """
+    ops = align(ref, hyp)
+    errors = sum(1 for i in range(len(ops)) if i not in accepted)
+    n_ref = len(norm_text(ref).split())
+    if n_ref == 0:
+        return 0.0 if errors == 0 else 1.0
+    return min(errors / n_ref, 1.0)
+
+
 def score_wer(ref: str, hyp: str) -> float:
     """WER of hyp against ref after normalization, capped at 1.0.
 

@@ -119,6 +119,59 @@ def score(
     typer.echo(f"scored: {len(load_scored_records(config.SCORED))} records")
 
 
+@app.command("asr-run")
+def asr_run(
+    limit: Optional[int] = typer.Option(
+        None, "--limit", help="Only transcribe a deterministic sample of N."),
+    seed: int = typer.Option(0, "--seed", help="Seed for --limit sampling."),
+    threads: int = typer.Option(4, "--threads", min=1,
+                                help="sherpa-onnx decode threads."),
+):
+    """ASR-only sherpa run over the manifest (no MT/TTS): WER benchmark input."""
+    from voice_suite import asr_bench  # heavy sherpa-onnx import
+    utts = sample_items(load_manifest(config.MANIFEST), limit, seed)
+    transcribe = asr_bench.get_transcriber(asr_bench.sherpa_model_dir(),
+                                           num_threads=threads)
+    n = asr_bench.run_asr(utts, transcribe, progress=typer.echo)
+    typer.echo(f"transcribed {n} new → {asr_bench.ASR_RESULTS}")
+
+
+@app.command()
+def review(port: int = typer.Option(8765, "--port", min=1, max=65535)):
+    """Open the manual WER review page (accept non-errors per word op)."""
+    import webbrowser
+
+    from voice_suite import asr_bench, review as review_mod
+    rows = review_mod.build_rows(load_manifest(config.MANIFEST),
+                                 asr_bench.load_asr_results(),
+                                 review_mod.load_decisions())
+    if not rows:
+        raise typer.BadParameter("no ASR results — run `voice-suite asr-run` first")
+    server = review_mod.serve_review(rows, port)
+    url = f"http://127.0.0.1:{port}/"
+    typer.echo(f"review page: {url} (Ctrl+C to stop; decisions save to "
+               f"{review_mod.DECISIONS})")
+    webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        server.shutdown()
+
+
+@app.command("wer-report")
+def wer_report():
+    """Render the WER-only report (raw + human-adjudicated)."""
+    from voice_suite import asr_bench, review as review_mod
+    rows = review_mod.build_rows(load_manifest(config.MANIFEST),
+                                 asr_bench.load_asr_results(),
+                                 review_mod.load_decisions())
+    text = review_mod.render_wer_report(rows)
+    out = config.OUT_DIR / "wer_report.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding="utf-8")
+    typer.echo(text)
+
+
 @app.command()
 def report():
     """Render the leaderboard markdown report."""
