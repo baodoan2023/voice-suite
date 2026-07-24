@@ -83,6 +83,10 @@ def get_transcriber(model_dir: Path, num_threads: int = 4) -> TranscribeFn:
         joiner=str(model_dir / "joiner.onnx"),
         tokens=str(model_dir / "tokens.txt"),
         num_threads=num_threads,
+        # Mirror my-2nd-voice SherpaAsr::load (src/pipeline/asr/sherpa.rs):
+        # beam search over top-4 hypotheses instead of greedy decoding.
+        decoding_method="modified_beam_search",
+        max_active_paths=4,
     )
 
     def transcribe(wav_path: Path) -> str:
