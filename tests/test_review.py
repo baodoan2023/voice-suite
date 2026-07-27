@@ -38,14 +38,27 @@ def test_render_wer_report_adjudicates():
     rows = build_rows([_utt("u", "một hai ba bốn")],
                       {"u": {"asr_text": "một hay ba bốn"}},  # 1 sub / 4 words
                       {"u": [0, 99]})  # stale index 99 must be ignored
-    text = render_wer_report(rows)
-    assert "mean WER (raw): **0.2500**" in text
-    assert "mean WER (adjudicated): **0.0000**" in text
-    assert "sub 1 (1 accepted)" in text
+    text = render_wer_report({"sherpa": rows})
+    assert "| sherpa | 1 | 0.2500 | 0.0000 | 1 | 0 | 0 | 1 | 0 |" in text
+    assert "| u | 0.2500 | 0.0000 | 1 | 2 |" in text  # per-utt detail
 
 
 def test_render_wer_report_empty():
-    assert "No ASR results" in render_wer_report([])
+    assert "No ASR results" in render_wer_report({})
+    assert "No ASR results" in render_wer_report({"sherpa": []})
+
+
+def test_render_wer_report_compares_engines():
+    utts = [_utt("u1", "một hai"), _utt("u2", "ba bốn")]
+    sherpa = build_rows(utts, {"u1": {"asr_text": "một hai"},
+                               "u2": {"asr_text": "ba năm"}}, {})
+    cloud = build_rows(utts, {"u1": {"asr_text": "một ba"}}, {})  # u2 not run
+    text = render_wer_report({"sherpa": sherpa, "openai": cloud})
+    assert "| engine | n |" in text
+    assert "| openai | 1 |" in text
+    assert "| sherpa | 2 |" in text
+    assert "| utt | openai | sherpa |" in text
+    assert "| u2 | — | 0.5000 |" in text  # missing engine cell
 
 
 def test_decisions_roundtrip(tmp_path):
@@ -73,8 +86,9 @@ def test_render_wer_report_ignores_negative_indices():
     rows = build_rows([_utt("u", "một hai ba bốn")],
                       {"u": {"asr_text": "một hay ba bốn"}},  # 1 sub / 4 words
                       {"u": [-1]})
-    text = render_wer_report(rows)
-    assert "mean WER (adjudicated): **0.2500**" in text  # -1 accepts nothing
+    text = render_wer_report({"sherpa": rows})
+    # -1 accepts nothing: adjudicated stays 0.2500, accepted count 0.
+    assert "| sherpa | 1 | 0.2500 | 0.2500 | 1 | 0 | 0 | 0 | 0 |" in text
 
 
 @pytest.fixture()

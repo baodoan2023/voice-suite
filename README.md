@@ -156,11 +156,19 @@ metric, with human adjudication instead of an LLM judge.
                                                #   errors (variants, spoken numbers)
     voice-suite wer-report                     # out/wer_report.md: raw + adjudicated WER
 
-`asr-run` reuses `impls/m2v_sherpa/local.toml` for the model dir and is
-incremental (`out/asr_sherpa.jsonl`, append-only). Review decisions live in
-`out/wer_decisions.json` and survive re-runs; a decision is an accepted word
-op ("this sub/del/ins does not count"), so adjudicated WER = errors the
-reviewer left standing ÷ reference words.
+Cloud engines for comparison (same manifest, same WER scoring):
+
+    export OPENAI_API_KEY=...                  # or GEMINI_API_KEY
+    voice-suite asr-run --engine openai        # gpt-4o-transcribe (--model whisper-1 …)
+    voice-suite asr-run --engine gemini        # gemini-2.5-flash audio transcription
+    voice-suite wer-report                     # one table per engine + per-utt matrix
+
+`asr-run` reuses `impls/m2v_sherpa/local.toml` for the sherpa model dir and
+is incremental per engine (`out/asr_<engine>.jsonl`, append-only; failed
+cloud calls are skipped and retried on rerun). Review decisions live in
+`out/wer_decisions_<engine>.json` (`review --engine <name>`); a decision is
+an accepted word op ("this sub/del/ins does not count"), so adjudicated WER
+= errors the reviewer left standing ÷ reference words.
 
 ## Manual smoke (models required)
 

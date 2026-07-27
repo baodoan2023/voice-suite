@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from voice_suite.asr_bench import (_read_wave_mono16, load_asr_results,
-                                   run_asr, sherpa_model_dir)
+from voice_suite.asr_bench import (_read_wave_mono16, get_cloud_transcriber,
+                                   load_asr_results, parse_gemini_response,
+                                   results_path, run_asr, sherpa_model_dir)
 from voice_suite.protocol import Utterance
 
 
@@ -65,3 +66,48 @@ def test_run_asr_is_incremental(tmp_path):
 def test_sherpa_model_dir_missing_config(tmp_path):
     with pytest.raises(RuntimeError, match="missing"):
         sherpa_model_dir(tmp_path / "nope.toml")
+
+
+def test_run_asr_skips_failed_and_retries_on_rerun(tmp_path):
+    wav = _write_wav(tmp_path / "a.wav")
+    utts = [_utt("ok", wav), _utt("boom", wav)]
+    out = tmp_path / "asr.jsonl"
+    fail_once = {"armed": True}
+
+    def flaky(path: Path) -> str:
+        # "boom" is second in order; fail its first attempt only.
+        if fail_once["armed"] and len(load_asr_results(out)) == 1:
+            fail_once["armed"] = False
+            raise RuntimeError("cloud 500")
+        return "xin chào"
+
+    messages: list[str] = []
+    assert run_asr(utts, flaky, out, progress=messages.append) == 1
+    assert any("FAILED" in m for m in messages)
+    assert set(load_asr_results(out)) == {"ok"}
+    assert run_asr(utts, flaky, out) == 1  # rerun retries only the failure
+    assert set(load_asr_results(out)) == {"ok", "boom"}
+
+
+def test_results_path_per_engine():
+    assert results_path("sherpa").name == "asr_sherpa.jsonl"
+    assert results_path("openai").name == "asr_openai.jsonl"
+
+
+def test_get_cloud_transcriber_unknown_engine():
+    with pytest.raises(ValueError, match="unknown cloud engine"):
+        get_cloud_transcriber("sherpa")
+
+
+def test_parse_gemini_response():
+    body = {"candidates": [{"content": {"parts": [
+        {"text": "xin "}, {"text": "chào"}]}}]}
+    assert parse_gemini_response(body) == "xin chào"
+
+
+def test_parse_gemini_response_malformed():
+    with pytest.raises(RuntimeError, match="unexpected gemini"):
+        parse_gemini_response({"candidates": []})
+    with pytest.raises(RuntimeError, match="empty gemini"):
+        parse_gemini_response(
+            {"candidates": [{"content": {"parts": [{"text": " "}]}}]})

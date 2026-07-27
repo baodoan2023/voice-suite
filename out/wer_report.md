@@ -1,9 +1,10 @@
-# WER report — m2v_sherpa
+# WER report
 
-- utterances: **200**
-- mean WER (raw): **0.1254**
-- mean WER (adjudicated): **0.1254** (after accepting reviewer-approved non-errors via `voice-suite review`)
-- ops: sub 397 (0 accepted), del 114 (0 accepted), ins 208 (0 accepted)
+Adjudicated = after a reviewer accepts non-errors via `voice-suite review --engine <name>`. Cloud engines' asr_ms includes network time.
+
+| engine | n | WER raw | WER adj | sub | del | ins | accepted | asr_ms P50 |
+|---|---|---|---|---|---|---|---|---|
+| sherpa | 200 | 0.1254 | 0.1254 | 397 | 114 | 208 | 0 | 541 |
 
 | utt | WER raw | WER adj | ops | accepted |
 |---|---|---|---|---|

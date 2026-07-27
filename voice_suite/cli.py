@@ -121,36 +121,59 @@ def score(
 
 @app.command("asr-run")
 def asr_run(
+    engine: str = typer.Option(
+        "sherpa", "--engine",
+        help="ASR engine: sherpa (local), openai (OPENAI_API_KEY) or "
+             "gemini (GEMINI_API_KEY)."),
+    model: Optional[str] = typer.Option(
+        None, "--model", help="Cloud model override (e.g. whisper-1)."),
     limit: Optional[int] = typer.Option(
         None, "--limit", help="Only transcribe a deterministic sample of N."),
     seed: int = typer.Option(0, "--seed", help="Seed for --limit sampling."),
     threads: int = typer.Option(4, "--threads", min=1,
                                 help="sherpa-onnx decode threads."),
 ):
-    """ASR-only sherpa run over the manifest (no MT/TTS): WER benchmark input."""
+    """ASR-only run over the manifest (no MT/TTS): WER benchmark input."""
     from voice_suite import asr_bench  # heavy sherpa-onnx import
+    if engine not in asr_bench.ENGINES:
+        raise typer.BadParameter(
+            f"unknown engine {engine!r}; choose from {list(asr_bench.ENGINES)}")
     utts = sample_items(load_manifest(config.MANIFEST), limit, seed)
-    transcribe = asr_bench.get_transcriber(asr_bench.sherpa_model_dir(),
-                                           num_threads=threads)
-    n = asr_bench.run_asr(utts, transcribe, progress=typer.echo)
-    typer.echo(f"transcribed {n} new → {asr_bench.ASR_RESULTS}")
+    if engine == "sherpa":
+        hw_dir = asr_bench.hotwords_dir_from_config()
+        transcribe = asr_bench.get_transcriber(asr_bench.sherpa_model_dir(),
+                                               num_threads=threads,
+                                               hotwords_dir=hw_dir)
+    else:
+        transcribe = asr_bench.get_cloud_transcriber(engine, model)
+    out_path = asr_bench.results_path(engine)
+    n = asr_bench.run_asr(utts, transcribe, out_path, progress=typer.echo)
+    typer.echo(f"transcribed {n} new → {out_path}")
 
 
 @app.command()
-def review(port: int = typer.Option(8765, "--port", min=1, max=65535)):
+def review(
+    engine: str = typer.Option("sherpa", "--engine",
+                               help="Engine whose transcripts to review."),
+    port: int = typer.Option(8765, "--port", min=1, max=65535),
+):
     """Open the manual WER review page (accept non-errors per word op)."""
     import webbrowser
 
     from voice_suite import asr_bench, review as review_mod
-    rows = review_mod.build_rows(load_manifest(config.MANIFEST),
-                                 asr_bench.load_asr_results(),
-                                 review_mod.load_decisions())
+    decisions_path = review_mod.decisions_path(engine)
+    rows = review_mod.build_rows(
+        load_manifest(config.MANIFEST),
+        asr_bench.load_asr_results(asr_bench.results_path(engine)),
+        review_mod.load_decisions(decisions_path))
     if not rows:
-        raise typer.BadParameter("no ASR results — run `voice-suite asr-run` first")
-    server = review_mod.serve_review(rows, port)
+        raise typer.BadParameter(
+            f"no ASR results for {engine!r} — run "
+            f"`voice-suite asr-run --engine {engine}` first")
+    server = review_mod.serve_review(rows, port, decisions_path=decisions_path)
     url = f"http://127.0.0.1:{port}/"
     typer.echo(f"review page: {url} (Ctrl+C to stop; decisions save to "
-               f"{review_mod.DECISIONS})")
+               f"{decisions_path})")
     webbrowser.open(url)
     try:
         server.serve_forever()
@@ -160,12 +183,16 @@ def review(port: int = typer.Option(8765, "--port", min=1, max=65535)):
 
 @app.command("wer-report")
 def wer_report():
-    """Render the WER-only report (raw + human-adjudicated)."""
+    """Render the WER report across every engine with results in out/."""
     from voice_suite import asr_bench, review as review_mod
-    rows = review_mod.build_rows(load_manifest(config.MANIFEST),
-                                 asr_bench.load_asr_results(),
-                                 review_mod.load_decisions())
-    text = review_mod.render_wer_report(rows)
+    utts = load_manifest(config.MANIFEST)
+    engines: dict[str, list[dict]] = {}
+    for results_file in sorted(config.OUT_DIR.glob("asr_*.jsonl")):
+        name = results_file.stem.removeprefix("asr_")
+        engines[name] = review_mod.build_rows(
+            utts, asr_bench.load_asr_results(results_file),
+            review_mod.load_decisions(review_mod.decisions_path(name)))
+    text = review_mod.render_wer_report(engines)
     out = config.OUT_DIR / "wer_report.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")

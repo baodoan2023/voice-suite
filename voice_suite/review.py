@@ -15,7 +15,12 @@ from pathlib import Path
 from voice_suite.protocol import Utterance
 from voice_suite.scoring.wer import adjudicated_wer, align, norm_text, score_wer
 
-DECISIONS = Path("out") / "wer_decisions.json"
+def decisions_path(engine: str) -> Path:
+    """Per-engine decision file: op indices only make sense per hypothesis."""
+    return Path("out") / f"wer_decisions_{engine}.json"
+
+
+DECISIONS = decisions_path("sherpa")
 
 
 def load_decisions(path: Path = DECISIONS) -> dict[str, list[int]]:
@@ -54,6 +59,7 @@ def build_rows(utts: list[Utterance], asr: dict[str, dict],
             "ops": [list(op) for op in align(u.ref_transcript, hyp)],
             "accepted": decisions.get(u.id, []),
             "wer": round(score_wer(u.ref_transcript, hyp), 4),
+            "asr_ms": asr[u.id].get("asr_ms", 0),
         })
     rows.sort(key=lambda r: -r["wer"])
     return rows
@@ -256,33 +262,67 @@ def _adjudicated(row: dict) -> float:
     return adjudicated_wer(row["ref"], row["hyp"], set(row["accepted"]))
 
 
-def render_wer_report(rows: list[dict]) -> str:
-    """WER-only markdown report with raw and human-adjudicated numbers."""
-    if not rows:
-        return "# WER report — m2v_sherpa\n\nNo ASR results yet — run `voice-suite asr-run` first.\n"
+def _engine_summary_row(name: str, rows: list[dict]) -> str:
     n = len(rows)
     mean_raw = sum(r["wer"] for r in rows) / n
     mean_adj = sum(_adjudicated(r) for r in rows) / n
-    by_type: dict[str, list[int]] = {"sub": [0, 0], "del": [0, 0], "ins": [0, 0]}
+    by_type = {"sub": 0, "del": 0, "ins": 0}
+    accepted = 0
     for r in rows:
-        valid = {i for i in r["accepted"] if 0 <= i < len(r["ops"])}
-        for i, op in enumerate(r["ops"]):
-            by_type[op[0]][0] += 1
-            by_type[op[0]][1] += i in valid
+        accepted += sum(1 for i in r["accepted"] if 0 <= i < len(r["ops"]))
+        for op in r["ops"]:
+            by_type[op[0]] += 1
+    p50 = sorted(r["asr_ms"] for r in rows)[n // 2]
+    return (f"| {name} | {n} | {mean_raw:.4f} | {mean_adj:.4f} "
+            f"| {by_type['sub']} | {by_type['del']} | {by_type['ins']} "
+            f"| {accepted} | {p50} |")
+
+
+def render_wer_report(engines: dict[str, list[dict]]) -> str:
+    """WER-only markdown report: per-engine summary, cross-engine matrix."""
+    engines = {k: v for k, v in engines.items() if v}
+    if not engines:
+        return ("# WER report\n\nNo ASR results yet — run "
+                "`voice-suite asr-run` first.\n")
     lines = [
-        "# WER report — m2v_sherpa",
+        "# WER report",
         "",
-        f"- utterances: **{n}**",
-        f"- mean WER (raw): **{mean_raw:.4f}**",
-        f"- mean WER (adjudicated): **{mean_adj:.4f}** "
-        "(after accepting reviewer-approved non-errors via `voice-suite review`)",
-        "- ops: " + ", ".join(
-            f"{k} {tot} ({acc} accepted)" for k, (tot, acc) in by_type.items()),
+        "Adjudicated = after a reviewer accepts non-errors via "
+        "`voice-suite review --engine <name>`. Cloud engines' asr_ms "
+        "includes network time.",
         "",
-        "| utt | WER raw | WER adj | ops | accepted |",
-        "|---|---|---|---|---|",
+        "| engine | n | WER raw | WER adj | sub | del | ins | accepted | asr_ms P50 |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
-    for r in sorted(rows, key=lambda r: (-_adjudicated(r), -r["wer"])):
-        lines.append(f"| {r['utt_id']} | {r['wer']:.4f} | {_adjudicated(r):.4f}"
-                     f" | {len(r['ops'])} | {len(r['accepted'])} |")
+    lines += [_engine_summary_row(name, rows)
+              for name, rows in sorted(engines.items())]
+    lines.append("")
+    if len(engines) == 1:
+        ((_, rows),) = engines.items()
+        lines += [
+            "| utt | WER raw | WER adj | ops | accepted |",
+            "|---|---|---|---|---|",
+        ]
+        for r in sorted(rows, key=lambda r: (-_adjudicated(r), -r["wer"])):
+            lines.append(
+                f"| {r['utt_id']} | {r['wer']:.4f} | {_adjudicated(r):.4f}"
+                f" | {len(r['ops'])} | {len(r['accepted'])} |")
+    else:
+        names = sorted(engines)
+        by_utt: dict[str, dict[str, float]] = {}
+        for name, rows in engines.items():
+            for r in rows:
+                by_utt.setdefault(r["utt_id"], {})[name] = r["wer"]
+        lines += [
+            "Raw WER per utterance (— = not run on that engine):",
+            "",
+            "| utt | " + " | ".join(names) + " |",
+            "|---|" + "---|" * len(names),
+        ]
+        worst_first = sorted(
+            by_utt, key=lambda u: -max(by_utt[u].values()))
+        for utt_id in worst_first:
+            cells = [f"{by_utt[utt_id][n]:.4f}" if n in by_utt[utt_id] else "—"
+                     for n in names]
+            lines.append(f"| {utt_id} | " + " | ".join(cells) + " |")
     return "\n".join(lines) + "\n"
