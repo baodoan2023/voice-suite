@@ -27,7 +27,7 @@ _SHERPA_CONFIG = Path("impls") / "m2v_sherpa" / "local.toml"
 
 ENGINES = ("sherpa", "openai", "gemini")
 CLOUD_DEFAULT_MODELS = {"openai": "gpt-4o-transcribe",
-                        "gemini": "gemini-2.5-flash"}
+                        "gemini": "gemini-3.6-flash"}
 
 TranscribeFn = Callable[[Path], str]
 
